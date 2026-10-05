@@ -32,6 +32,7 @@ const client = new Client({
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent
     ],
+
     partials: [
         Partials.Message,
         Partials.Channel,
@@ -48,7 +49,8 @@ const TOKEN = process.env.TOKEN;
 
 const LOG_CHANNEL_ID = '1556626740569444422';
 
-const WARN_LOG_CHANNEL_ID = '1554500648450392155';
+const WARN_LOG_CHANNEL_ID =
+    '1554500648450392155';
 
 const ALLOWED_INVITE_CATEGORIES = [
     '1554482905147904070',
@@ -56,8 +58,11 @@ const ALLOWED_INVITE_CATEGORIES = [
 ];
 
 // Cargos de warn
-const WARN_1_ROLE_ID = '1556667619291955230';
-const WARN_2_ROLE_ID = '1556667697616519230';
+const WARN_1_ROLE_ID =
+    '1556667619291955230';
+
+const WARN_2_ROLE_ID =
+    '1556667697616519230';
 
 // Quem pode aplicar warn
 const WARN_ALLOWED_ROLES = [
@@ -65,11 +70,16 @@ const WARN_ALLOWED_ROLES = [
     '1554508476510900226'
 ];
 
+// Link do STJD
+const STJD_URL =
+    'https://discord.gg/zXdZ9SwTG';
+
 // =========================
 // CONTROLE DE MENSAGENS
 // =========================
 
-const securityDeletedMessages = new Set();
+const securityDeletedMessages =
+    new Set();
 
 // =========================
 // SLASH COMMANDS
@@ -78,20 +88,29 @@ const securityDeletedMessages = new Set();
 const commands = [
     new SlashCommandBuilder()
         .setName('warn')
-        .setDescription('Aplica uma advertência a um membro.')
+        .setDescription(
+            'Aplica uma advertência a um membro.'
+        )
+
         .addUserOption(option =>
             option
                 .setName('membro')
-                .setDescription('Membro que receberá a advertência.')
+                .setDescription(
+                    'Membro que receberá a advertência.'
+                )
                 .setRequired(true)
         )
+
         .addStringOption(option =>
             option
                 .setName('motivo')
-                .setDescription('Motivo da advertência.')
+                .setDescription(
+                    'Motivo da advertência.'
+                )
                 .setRequired(true)
                 .setMaxLength(1000)
         )
+
         .toJSON()
 ];
 
@@ -101,19 +120,28 @@ const commands = [
 
 async function registerCommands() {
     try {
-        const rest = new REST({ version: '10' })
-            .setToken(TOKEN);
+        const rest =
+            new REST({
+                version: '10'
+            }).setToken(TOKEN);
 
-        console.log('🔄 Registrando comandos...');
+        console.log(
+            '🔄 Registrando comandos...'
+        );
 
         await rest.put(
-            Routes.applicationCommands(client.user.id),
+            Routes.applicationCommands(
+                client.user.id
+            ),
             {
                 body: commands
             }
         );
 
-        console.log('✅ Comandos registrados com sucesso.');
+        console.log(
+            '✅ Comandos registrados com sucesso.'
+        );
+
     } catch (error) {
         console.error(
             '❌ Erro ao registrar comandos:',
@@ -126,43 +154,58 @@ async function registerCommands() {
 // READY
 // =========================
 
-client.once('ready', async () => {
-    console.log(
-        `✅ VTL Security Bot online como ${client.user.tag}`
-    );
+client.once(
+    'ready',
+    async () => {
 
-    await registerCommands();
-});
+        console.log(
+            `✅ VTL Security Bot online como ${client.user.tag}`
+        );
+
+        await registerCommands();
+    }
+);
 
 // =========================
 // DETECTAR CONVITE DISCORD
 // =========================
 
-function containsDiscordInvite(content) {
+function containsDiscordInvite(
+    content
+) {
     if (!content) return false;
 
     const inviteRegex =
         /(?:https?:\/\/)?(?:www\.)?(?:discord\.gg|discord\.com\/invite|discordapp\.com\/invite)\/[a-zA-Z0-9-]+/i;
 
-    return inviteRegex.test(content);
+    return inviteRegex.test(
+        content
+    );
 }
 
 // =========================
 // PREVIEW DA MENSAGEM
 // =========================
 
-async function createMessagePreview(message) {
+async function createMessagePreview(
+    message
+) {
+
     const width = 1000;
     const height = 190;
 
-    const canvas = createCanvas(
-        width,
-        height
-    );
+    const canvas =
+        createCanvas(
+            width,
+            height
+        );
 
-    const ctx = canvas.getContext('2d');
+    const ctx =
+        canvas.getContext('2d');
 
-    ctx.fillStyle = '#1e1f22';
+    ctx.fillStyle =
+        '#1e1f22';
+
     ctx.fillRect(
         0,
         0,
@@ -175,23 +218,30 @@ async function createMessagePreview(message) {
     const avatarSize = 100;
 
     try {
+
         if (message.author) {
+
             const avatarURL =
-                message.author.displayAvatarURL({
-                    extension: 'png',
-                    size: 256
-                });
+                message.author
+                    .displayAvatarURL({
+                        extension: 'png',
+                        size: 256
+                    });
 
             const avatar =
-                await loadImage(avatarURL);
+                await loadImage(
+                    avatarURL
+                );
 
             ctx.save();
 
             ctx.beginPath();
 
             ctx.arc(
-                avatarX + avatarSize / 2,
-                avatarY + avatarSize / 2,
+                avatarX +
+                    avatarSize / 2,
+                avatarY +
+                    avatarSize / 2,
                 avatarSize / 2,
                 0,
                 Math.PI * 2
@@ -209,14 +259,19 @@ async function createMessagePreview(message) {
 
             ctx.restore();
         }
+
     } catch (error) {
-        ctx.fillStyle = '#5865f2';
+
+        ctx.fillStyle =
+            '#5865f2';
 
         ctx.beginPath();
 
         ctx.arc(
-            avatarX + avatarSize / 2,
-            avatarY + avatarSize / 2,
+            avatarX +
+                avatarSize / 2,
+            avatarY +
+                avatarSize / 2,
             avatarSize / 2,
             0,
             Math.PI * 2
@@ -272,7 +327,8 @@ async function createMessagePreview(message) {
         !content &&
         message.attachments?.size
     ) {
-        content = '📎 Anexo';
+        content =
+            '📎 Anexo';
     }
 
     if (!content) {
@@ -288,8 +344,10 @@ async function createMessagePreview(message) {
 
     if (content.length > 85) {
         content =
-            content.slice(0, 85) +
-            '...';
+            content.slice(
+                0,
+                85
+            ) + '...';
     }
 
     ctx.font =
@@ -304,7 +362,9 @@ async function createMessagePreview(message) {
         145
     );
 
-    return canvas.encode('png');
+    return canvas.encode(
+        'png'
+    );
 }
 
 // =========================
@@ -314,10 +374,14 @@ async function createMessagePreview(message) {
 client.on(
     'messageCreate',
     async message => {
-        try {
-            if (!message.guild) return;
 
-            if (message.author.bot) return;
+        try {
+
+            if (!message.guild)
+                return;
+
+            if (message.author.bot)
+                return;
 
             if (
                 !containsDiscordInvite(
@@ -331,9 +395,10 @@ client.on(
                 message.channel.parentId;
 
             if (
-                ALLOWED_INVITE_CATEGORIES.includes(
-                    categoryId
-                )
+                ALLOWED_INVITE_CATEGORIES
+                    .includes(
+                        categoryId
+                    )
             ) {
                 return;
             }
@@ -342,15 +407,21 @@ client.on(
                 message.id
             );
 
-            setTimeout(() => {
-                securityDeletedMessages.delete(
-                    message.id
-                );
-            }, 10000);
+            setTimeout(
+                () => {
+                    securityDeletedMessages.delete(
+                        message.id
+                    );
+                },
+                10000
+            );
 
             try {
+
                 await message.delete();
+
             } catch (error) {
+
                 console.log(
                     '❌ Não foi possível apagar a mensagem:',
                     error.message
@@ -365,15 +436,18 @@ client.on(
 
             const container =
                 new ContainerBuilder()
+
                     .addTextDisplayComponents(
                         new TextDisplayBuilder()
                             .setContent(
                                 `🔔 | ${message.author} não é possivel mandar links de convites nesse canal!`
                             )
                     )
+
                     .addSeparatorComponents(
                         new SeparatorBuilder()
                     )
+
                     .addTextDisplayComponents(
                         new TextDisplayBuilder()
                             .setContent(
@@ -382,6 +456,7 @@ client.on(
                     );
 
             try {
+
                 const warning =
                     await message.channel.send({
                         components: [
@@ -393,14 +468,17 @@ client.on(
 
                 setTimeout(
                     async () => {
+
                         try {
                             await warning.delete();
                         } catch (error) {}
+
                     },
                     3000
                 );
 
             } catch (error) {
+
                 console.log(
                     '❌ Erro ao enviar aviso:',
                     error.message
@@ -408,6 +486,7 @@ client.on(
             }
 
         } catch (error) {
+
             console.error(
                 '❌ Erro no bloqueio de convites:',
                 error
@@ -423,14 +502,18 @@ client.on(
 client.on(
     'messageDelete',
     async message => {
+
         try {
-            if (!message.guild) return;
+
+            if (!message.guild)
+                return;
 
             if (
                 securityDeletedMessages.has(
                     message.id
                 )
             ) {
+
                 securityDeletedMessages.delete(
                     message.id
                 );
@@ -438,7 +521,11 @@ client.on(
                 return;
             }
 
-            if (message.author?.bot) return;
+            if (
+                message.author?.bot
+            ) {
+                return;
+            }
 
             const logChannel =
                 message.guild.channels.cache.get(
@@ -446,6 +533,7 @@ client.on(
                 );
 
             if (!logChannel) {
+
                 console.log(
                     '❌ Canal de logs não encontrado.'
                 );
@@ -471,6 +559,7 @@ client.on(
                 '*Mensagem sem conteúdo de texto*';
 
             if (content.length > 3000) {
+
                 content =
                     content.slice(
                         0,
@@ -484,23 +573,30 @@ client.on(
                     '\\`\\`\\`'
                 );
 
-            const imageAttachments = [];
+            const imageAttachments =
+                [];
 
             if (
                 message.attachments?.size
             ) {
+
                 message.attachments.forEach(
                     attachment => {
+
                         const isImage =
-                            attachment.contentType?.startsWith(
-                                'image/'
-                            ) ||
-                            /\.(png|jpg|jpeg|gif|webp)$/i.test(
-                                attachment.name ||
-                                ''
-                            );
+                            attachment
+                                .contentType
+                                ?.startsWith(
+                                    'image/'
+                                ) ||
+                            /\.(png|jpg|jpeg|gif|webp)$/i
+                                .test(
+                                    attachment.name ||
+                                    ''
+                                );
 
                         if (isImage) {
+
                             imageAttachments.push(
                                 attachment.url
                             );
@@ -509,14 +605,18 @@ client.on(
                 );
             }
 
-            let previewBuffer = null;
+            let previewBuffer =
+                null;
 
             try {
+
                 previewBuffer =
                     await createMessagePreview(
                         message
                     );
+
             } catch (error) {
+
                 console.log(
                     '⚠️ Erro ao criar preview:',
                     error.message
@@ -527,6 +627,7 @@ client.on(
                 new ContainerBuilder();
 
             if (previewBuffer) {
+
                 const mediaGallery =
                     new MediaGalleryBuilder()
                         .addItems(
@@ -536,14 +637,16 @@ client.on(
                                 )
                         );
 
-                container.addMediaGalleryComponents(
-                    mediaGallery
-                );
+                container
+                    .addMediaGalleryComponents(
+                        mediaGallery
+                    );
             }
 
-            container.addSeparatorComponents(
-                new SeparatorBuilder()
-            );
+            container
+                .addSeparatorComponents(
+                    new SeparatorBuilder()
+                );
 
             let logText =
                 `## 🗑 Mensagem Deletada\n` +
@@ -557,34 +660,43 @@ client.on(
             if (
                 imageAttachments.length > 0
             ) {
+
                 logText +=
                     `\n-# Imagem`;
 
                 for (
-                    const url of imageAttachments
+                    const url of
+                    imageAttachments
                 ) {
+
                     logText +=
                         `\n${url}`;
                 }
             }
 
-            container.addTextDisplayComponents(
-                new TextDisplayBuilder()
-                    .setContent(logText)
-            );
+            container
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder()
+                        .setContent(
+                            logText
+                        )
+                );
 
-            container.addSeparatorComponents(
-                new SeparatorBuilder()
-            );
+            container
+                .addSeparatorComponents(
+                    new SeparatorBuilder()
+                );
 
-            container.addTextDisplayComponents(
-                new TextDisplayBuilder()
-                    .setContent(
-                        '-# VTL Security Bot'
-                    )
-            );
+            container
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder()
+                        .setContent(
+                            '-# VTL Security Bot'
+                        )
+                );
 
             if (previewBuffer) {
+
                 const previewAttachment =
                     new AttachmentBuilder(
                         previewBuffer,
@@ -606,6 +718,7 @@ client.on(
                 });
 
             } else {
+
                 await logChannel.send({
                     components: [
                         container
@@ -616,6 +729,7 @@ client.on(
             }
 
         } catch (error) {
+
             console.error(
                 '❌ Erro no messageDelete:',
                 error
@@ -634,7 +748,9 @@ client.on(
         oldMessage,
         newMessage
     ) => {
+
         try {
+
             if (!newMessage.guild)
                 return;
 
@@ -657,6 +773,7 @@ client.on(
                 );
 
             if (!logChannel) {
+
                 console.log(
                     '❌ Canal de logs não encontrado.'
                 );
@@ -681,7 +798,10 @@ client.on(
                 oldMessage.content ||
                 '*Sem conteúdo*';
 
-            if (oldContent.length > 1500) {
+            if (
+                oldContent.length > 1500
+            ) {
+
                 oldContent =
                     oldContent.slice(
                         0,
@@ -699,7 +819,10 @@ client.on(
                 newMessage.content ||
                 '*Sem conteúdo*';
 
-            if (newContent.length > 1500) {
+            if (
+                newContent.length > 1500
+            ) {
+
                 newContent =
                     newContent.slice(
                         0,
@@ -716,31 +839,34 @@ client.on(
             const container =
                 new ContainerBuilder();
 
-            container.addTextDisplayComponents(
-                new TextDisplayBuilder()
-                    .setContent(
-                        `## 📝 Mensagem editada\n` +
-                        `-# Canal\n` +
-                        `<#${newMessage.channelId}>\n` +
-                        `-# User\n` +
-                        `${authorMention} (\`${authorId}\`)\n` +
-                        `-# Mensagem Antiga\n` +
-                        `\`\`\`\n${oldContent}\n\`\`\`\n` +
-                        `-# Mensagem nova\n` +
-                        `\`\`\`\n${newContent}\n\`\`\``
-                    )
-            );
+            container
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder()
+                        .setContent(
+                            `## 📝 Mensagem editada\n` +
+                            `-# Canal\n` +
+                            `<#${newMessage.channelId}>\n` +
+                            `-# User\n` +
+                            `${authorMention} (\`${authorId}\`)\n` +
+                            `-# Mensagem Antiga\n` +
+                            `\`\`\`\n${oldContent}\n\`\`\`\n` +
+                            `-# Mensagem nova\n` +
+                            `\`\`\`\n${newContent}\n\`\`\``
+                        )
+                );
 
-            container.addSeparatorComponents(
-                new SeparatorBuilder()
-            );
+            container
+                .addSeparatorComponents(
+                    new SeparatorBuilder()
+                );
 
-            container.addTextDisplayComponents(
-                new TextDisplayBuilder()
-                    .setContent(
-                        '-# VTL Security Bot'
-                    )
-            );
+            container
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder()
+                        .setContent(
+                            '-# VTL Security Bot'
+                        )
+                );
 
             await logChannel.send({
                 components: [
@@ -751,6 +877,7 @@ client.on(
             });
 
         } catch (error) {
+
             console.error(
                 '❌ Erro no messageUpdate:',
                 error
@@ -764,9 +891,10 @@ client.on(
 // =========================
 
 function canUseWarn(member) {
-    if (!member) return false;
 
-    // Administrador pode usar
+    if (!member)
+        return false;
+
     if (
         member.permissions.has(
             PermissionFlagsBits.Administrator
@@ -775,7 +903,6 @@ function canUseWarn(member) {
         return true;
     }
 
-    // Cargos autorizados
     return WARN_ALLOWED_ROLES.some(
         roleId =>
             member.roles.cache.has(
@@ -791,7 +918,9 @@ function canUseWarn(member) {
 client.on(
     'interactionCreate',
     async interaction => {
+
         try {
+
             if (
                 !interaction.isChatInputCommand()
             ) {
@@ -806,7 +935,7 @@ client.on(
             }
 
             // =========================
-            // VERIFICAR PERMISSÃO
+            // PERMISSÃO
             // =========================
 
             if (
@@ -814,6 +943,7 @@ client.on(
                     interaction.member
                 )
             ) {
+
                 await interaction.reply({
                     content:
                         '❌ Você não possui permissão para usar este comando.',
@@ -839,9 +969,12 @@ client.on(
                     .fetch(
                         targetUser.id
                     )
-                    .catch(() => null);
+                    .catch(
+                        () => null
+                    );
 
             if (!member) {
+
                 await interaction.reply({
                     content:
                         '❌ Esse membro não está no servidor.',
@@ -852,8 +985,8 @@ client.on(
                 return;
             }
 
-            // Não permitir warn no próprio bot
             if (targetUser.bot) {
+
                 await interaction.reply({
                     content:
                         '❌ Você não pode aplicar warn em um bot.',
@@ -864,11 +997,11 @@ client.on(
                 return;
             }
 
-            // Não permitir warn em si mesmo
             if (
                 targetUser.id ===
                 interaction.user.id
             ) {
+
                 await interaction.reply({
                     content:
                         '❌ Você não pode aplicar warn em si mesmo.',
@@ -880,13 +1013,14 @@ client.on(
             }
 
             // =========================
-            // VERIFICAR HIERARQUIA
+            // HIERARQUIA
             // =========================
 
             if (
                 member.id ===
                 interaction.guild.ownerId
             ) {
+
                 await interaction.reply({
                     content:
                         '❌ Não é possível aplicar warn no dono do servidor.',
@@ -903,6 +1037,7 @@ client.on(
                 interaction.guild.ownerId !==
                 interaction.user.id
             ) {
+
                 await interaction.reply({
                     content:
                         '❌ Você não pode aplicar warn em um membro com cargo igual ou superior ao seu.',
@@ -914,7 +1049,7 @@ client.on(
             }
 
             // =========================
-            // IDENTIFICAR WARN ATUAL
+            // IDENTIFICAR WARN
             // =========================
 
             const hasWarn1 =
@@ -927,13 +1062,18 @@ client.on(
                     WARN_2_ROLE_ID
                 );
 
-            let warnNumber = 0;
+            let warnNumber;
 
             if (hasWarn2) {
+
                 warnNumber = 3;
+
             } else if (hasWarn1) {
+
                 warnNumber = 2;
+
             } else {
+
                 warnNumber = 1;
             }
 
@@ -947,12 +1087,18 @@ client.on(
             // WARN 1
             // =========================
 
-            if (warnNumber === 1) {
+            if (
+                warnNumber === 1
+            ) {
+
                 try {
+
                     await member.roles.add(
                         WARN_1_ROLE_ID
                     );
+
                 } catch (error) {
+
                     await interaction.reply({
                         content:
                             '❌ Não consegui adicionar o cargo do primeiro warn. Verifique a hierarquia dos cargos do bot.',
@@ -965,11 +1111,14 @@ client.on(
 
                 // Mute de 1 hora
                 try {
+
                     await member.timeout(
                         60 * 60 * 1000,
                         `Warn 1/3: ${reason}`
                     );
+
                 } catch (error) {
+
                     console.log(
                         '⚠️ Não foi possível aplicar o mute de 1 hora:',
                         error.message
@@ -977,40 +1126,39 @@ client.on(
                 }
 
                 const logContainer =
-                    new ContainerBuilder();
+                    new ContainerBuilder()
 
-                logContainer.addTextDisplayComponents(
-                    new TextDisplayBuilder()
-                        .setContent(
-                            `## ⚠️ Advertência Aplicada\n\n` +
-                            `-# Staff\n` +
-                            `${staffMention} (\`${interaction.user.id}\`)\n` +
-                            `-# Membro\n` +
-                            `${memberMention} (\`${member.id}\`)\n` +
-                            `-# Motivo\n` +
-                            `${reason}\n` +
-                            `-# Info\n` +
-                            `1/3 • Mute de 1 hora`
+                        .addTextDisplayComponents(
+                            new TextDisplayBuilder()
+                                .setContent(
+                                    `## ⚠️ Advertência Aplicada\n\n` +
+                                    `-# Staff\n` +
+                                    `${staffMention} (\`${interaction.user.id}\`)\n` +
+                                    `-# Membro\n` +
+                                    `${memberMention} (\`${member.id}\`)\n` +
+                                    `-# Motivo\n` +
+                                    `${reason}\n` +
+                                    `-# Info\n` +
+                                    `1/3 • Mute de 1 hora`
+                                )
                         )
-                );
 
-                logContainer.addSeparatorComponents(
-                    new SeparatorBuilder()
-                );
-
-                logContainer.addTextDisplayComponents(
-                    new TextDisplayBuilder()
-                        .setContent(
-                            '-# VTL Security Bot'
+                        .addSeparatorComponents(
+                            new SeparatorBuilder()
                         )
-                );
+
+                        .addTextDisplayComponents(
+                            new TextDisplayBuilder()
+                                .setContent(
+                                    '-# VTL Security Bot'
+                                )
+                        );
 
                 await sendWarnLog(
                     interaction.guild,
                     logContainer
                 );
 
-                // DM
                 await sendWarnDM(
                     member,
                     `⚠️ Você recebeu uma Advertência na VTL.\n\n` +
@@ -1037,12 +1185,18 @@ client.on(
             // WARN 2
             // =========================
 
-            if (warnNumber === 2) {
+            if (
+                warnNumber === 2
+            ) {
+
                 try {
+
                     await member.roles.add(
                         WARN_2_ROLE_ID
                     );
+
                 } catch (error) {
+
                     await interaction.reply({
                         content:
                             '❌ Não consegui adicionar o cargo do segundo warn. Verifique a hierarquia dos cargos do bot.',
@@ -1055,11 +1209,14 @@ client.on(
 
                 // Mute de 1 hora
                 try {
+
                     await member.timeout(
                         60 * 60 * 1000,
                         `Warn 2/3: ${reason}`
                     );
+
                 } catch (error) {
+
                     console.log(
                         '⚠️ Não foi possível aplicar o mute de 1 hora:',
                         error.message
@@ -1067,40 +1224,39 @@ client.on(
                 }
 
                 const logContainer =
-                    new ContainerBuilder();
+                    new ContainerBuilder()
 
-                logContainer.addTextDisplayComponents(
-                    new TextDisplayBuilder()
-                        .setContent(
-                            `## ⚠️ Advertência Aplicada\n\n` +
-                            `-# Staff\n` +
-                            `${staffMention} (\`${interaction.user.id}\`)\n` +
-                            `-# Membro\n` +
-                            `${memberMention} (\`${member.id}\`)\n` +
-                            `-# Motivo\n` +
-                            `${reason}\n` +
-                            `-# Info\n` +
-                            `2/3 • Mute de 1 hora`
+                        .addTextDisplayComponents(
+                            new TextDisplayBuilder()
+                                .setContent(
+                                    `## ⚠️ Advertência Aplicada\n\n` +
+                                    `-# Staff\n` +
+                                    `${staffMention} (\`${interaction.user.id}\`)\n` +
+                                    `-# Membro\n` +
+                                    `${memberMention} (\`${member.id}\`)\n` +
+                                    `-# Motivo\n` +
+                                    `${reason}\n` +
+                                    `-# Info\n` +
+                                    `2/3 • Mute de 1 hora`
+                                )
                         )
-                );
 
-                logContainer.addSeparatorComponents(
-                    new SeparatorBuilder()
-                );
-
-                logContainer.addTextDisplayComponents(
-                    new TextDisplayBuilder()
-                        .setContent(
-                            '-# VTL Security Bot'
+                        .addSeparatorComponents(
+                            new SeparatorBuilder()
                         )
-                );
+
+                        .addTextDisplayComponents(
+                            new TextDisplayBuilder()
+                                .setContent(
+                                    '-# VTL Security Bot'
+                                )
+                        );
 
                 await sendWarnLog(
                     interaction.guild,
                     logContainer
                 );
 
-                // DM
                 await sendWarnDM(
                     member,
                     `⚠️ Você recebeu uma Advertência na VTL.\n\n` +
@@ -1127,118 +1283,146 @@ client.on(
             // WARN 3 = BAN
             // =========================
 
-            if (warnNumber === 3) {
+            if (
+                warnNumber === 3
+            ) {
+
+                // =========================
+                // LOG DO BAN
+                // =========================
+
                 const logContainer =
-                    new ContainerBuilder();
+                    new ContainerBuilder()
 
-                logContainer.addTextDisplayComponents(
-                    new TextDisplayBuilder()
-                        .setContent(
-                            `## 🔨 Banimento aplicado\n\n` +
-                            `-# Staff\n` +
-                            `${staffMention} (\`${interaction.user.id}\`)\n` +
-                            `-# Membro\n` +
-                            `${memberMention} (\`${member.id}\`)\n` +
-                            `-# Motivo\n` +
-                            `${reason}\n` +
-                            `-# Info\n` +
-                            `3/3 • Banido do servidor.`
+                        .addTextDisplayComponents(
+                            new TextDisplayBuilder()
+                                .setContent(
+                                    `## 🔨 Banimento aplicado\n\n` +
+                                    `-# Staff\n` +
+                                    `${staffMention} (\`${interaction.user.id}\`)\n` +
+                                    `-# Membro\n` +
+                                    `${memberMention} (\`${member.id}\`)\n` +
+                                    `-# Motivo\n` +
+                                    `${reason}\n` +
+                                    `-# Info\n` +
+                                    `3/3 • Banido do servidor.`
+                                )
                         )
-                );
 
-                logContainer.addSeparatorComponents(
-                    new SeparatorBuilder()
-                );
-
-                logContainer.addTextDisplayComponents(
-                    new TextDisplayBuilder()
-                        .setContent(
-                            '-# VTL Security Bot'
+                        .addSeparatorComponents(
+                            new SeparatorBuilder()
                         )
-                );
 
-                // DM ANTES DO BAN
-                const banDMContainer =
-                    new ContainerBuilder();
+                        .addTextDisplayComponents(
+                            new TextDisplayBuilder()
+                                .setContent(
+                                    '-# VTL Security Bot'
+                                )
+                        );
 
-                banDMContainer.addTextDisplayComponents(
-                    new TextDisplayBuilder()
-                        .setContent(
-                            `## 🔨 Você foi **BANIDO** da VTL\n\n` +
-                            `-# Staff\n` +
-                            `${staffMention} (\`${interaction.user.id}\`)\n` +
-                            `-# Motivo\n` +
-                            `${reason}\n` +
-                            `-# Info\n` +
-                            `3/3 • Banido do servidor.\n\n` +
-                            `> Para ser desbanido entre no STJD da VTL clicando no botão abaixo e abra um ticket.`
-                        )
-                );
-
-                banDMContainer.addSeparatorComponents(
-                    new SeparatorBuilder()
-                );
+                // =========================
+                // DM DO BAN
+                // =========================
 
                 const stjdButton =
                     new ButtonBuilder()
-                        .setLabel('STJD')
-                        .setEmoji('🔨')
+                        .setLabel(
+                            'STJD'
+                        )
+                        .setEmoji(
+                            '🔨'
+                        )
                         .setStyle(
                             ButtonStyle.Link
                         )
                         .setURL(
-                            'https://discord.gg/zXdZ9SwTG'
+                            STJD_URL
                         );
 
-                const buttonRow =
-                    new ActionRowBuilder()
-                        .addComponents(
-                            stjdButton
+                const banDMContainer =
+                    new ContainerBuilder()
+
+                        .addTextDisplayComponents(
+                            new TextDisplayBuilder()
+                                .setContent(
+                                    `## 🔨 Você foi **BANIDO** da VTL\n\n` +
+                                    `-# Staff\n` +
+                                    `${staffMention} (\`${interaction.user.id}\`)\n` +
+                                    `-# Motivo\n` +
+                                    `${reason}\n` +
+                                    `-# Info\n` +
+                                    `3/3 • Banido do servidor.\n\n` +
+                                    `> Para ser desbanido entre no STJD da VTL clicando no botão abaixo e abra um ticket.`
+                                )
+                        )
+
+                        .addSeparatorComponents(
+                            new SeparatorBuilder()
+                        )
+
+                        // BOTÃO DENTRO DO CONTAINER
+                        .addActionRowComponents(
+                            new ActionRowBuilder()
+                                .addComponents(
+                                    stjdButton
+                                )
+                        )
+
+                        .addSeparatorComponents(
+                            new SeparatorBuilder()
+                        )
+
+                        .addTextDisplayComponents(
+                            new TextDisplayBuilder()
+                                .setContent(
+                                    '-# VTL Security Bot'
+                                )
                         );
 
-                // Enviar DM
+                // =========================
+                // ENVIAR DM
+                // =========================
+
                 try {
+
                     await member.send({
                         components: [
                             banDMContainer
-                        ],
-                        flags:
-                            MessageFlags.IsComponentsV2,
-                        files: []
-                    });
-
-                    // Botão de link precisa ser enviado
-                    // como componente junto da mensagem.
-                    // Discord permite ActionRow com botão
-                    // junto do Components V2.
-                    await member.send({
-                        components: [
-                            buttonRow
                         ],
                         flags:
                             MessageFlags.IsComponentsV2
                     });
 
                 } catch (error) {
+
                     console.log(
                         `⚠️ Não foi possível enviar DM para ${member.user.tag}.`
                     );
                 }
 
-                // Registrar log
+                // =========================
+                // LOG
+                // =========================
+
                 await sendWarnLog(
                     interaction.guild,
                     logContainer
                 );
 
-                // Banir
+                // =========================
+                // BANIR
+                // =========================
+
                 try {
+
                     await member.ban({
                         deleteMessageSeconds: 0,
                         reason:
                             `3/3 Warns: ${reason}`
                     });
+
                 } catch (error) {
+
                     console.error(
                         '❌ Erro ao banir membro:',
                         error
@@ -1265,6 +1449,7 @@ client.on(
             }
 
         } catch (error) {
+
             console.error(
                 '❌ Erro no comando /warn:',
                 error
@@ -1275,12 +1460,15 @@ client.on(
                 !interaction.replied &&
                 !interaction.deferred
             ) {
+
                 await interaction.reply({
                     content:
                         '❌ Ocorreu um erro ao executar o comando.',
                     flags:
                         MessageFlags.Ephemeral
-                }).catch(() => {});
+                }).catch(
+                    () => {}
+                );
             }
         }
     }
@@ -1294,13 +1482,16 @@ async function sendWarnLog(
     guild,
     container
 ) {
+
     try {
+
         const channel =
             guild.channels.cache.get(
                 WARN_LOG_CHANNEL_ID
             );
 
         if (!channel) {
+
             console.log(
                 '❌ Canal de logs de warn não encontrado.'
             );
@@ -1317,6 +1508,7 @@ async function sendWarnLog(
         });
 
     } catch (error) {
+
         console.error(
             '❌ Erro ao enviar log do warn:',
             error
@@ -1332,12 +1524,17 @@ async function sendWarnDM(
     member,
     content
 ) {
+
     try {
+
         const container =
             new ContainerBuilder()
+
                 .addTextDisplayComponents(
                     new TextDisplayBuilder()
-                        .setContent(content)
+                        .setContent(
+                            content
+                        )
                 );
 
         await member.send({
@@ -1349,6 +1546,7 @@ async function sendWarnDM(
         });
 
     } catch (error) {
+
         console.log(
             `⚠️ Não foi possível enviar DM para ${member.user.tag}.`
         );

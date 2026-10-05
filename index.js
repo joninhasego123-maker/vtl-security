@@ -2,7 +2,6 @@ const {
     Client,
     GatewayIntentBits,
     Partials,
-    AuditLogEvent,
     MessageFlags,
     ContainerBuilder,
     TextDisplayBuilder,
@@ -28,9 +27,9 @@ const client = new Client({
     ]
 });
 
-// ===============================
+// ==========================================
 // CONFIGURAÇÕES
-// ===============================
+// ==========================================
 
 const TOKEN = process.env.TOKEN;
 
@@ -41,17 +40,17 @@ const ALLOWED_INVITE_CATEGORIES = [
     '1552649476370604214'
 ];
 
-// ===============================
-// READY
-// ===============================
+// ==========================================
+// BOT ONLINE
+// ==========================================
 
 client.once('ready', () => {
     console.log(`✅ VTL Security Bot online como ${client.user.tag}`);
 });
 
-// ===============================
-// DETECTAR CONVITES
-// ===============================
+// ==========================================
+// DETECTAR LINK DE CONVITE
+// ==========================================
 
 function containsDiscordInvite(content) {
     if (!content) return false;
@@ -62,85 +61,102 @@ function containsDiscordInvite(content) {
     return inviteRegex.test(content);
 }
 
-// ===============================
-// MENSAGENS NOVAS
-// ===============================
+// ==========================================
+// BLOQUEIO DE CONVITES
+// ==========================================
 
 client.on('messageCreate', async (message) => {
     try {
         if (!message.guild) return;
         if (message.author.bot) return;
 
-        // Verifica se é link de convite
-        if (containsDiscordInvite(message.content)) {
+        if (!containsDiscordInvite(message.content)) return;
 
-            // Verifica a categoria do canal
-            const categoryId = message.channel.parentId;
+        // Categoria do canal
+        const categoryId = message.channel.parentId;
 
-            // Se estiver em uma categoria permitida, não bloqueia
-            if (ALLOWED_INVITE_CATEGORIES.includes(categoryId)) {
-                return;
-            }
+        // Categorias onde convites são permitidos
+        if (ALLOWED_INVITE_CATEGORIES.includes(categoryId)) {
+            return;
+        }
 
-            // Apaga a mensagem
-            try {
-                await message.delete();
-            } catch (err) {
-                console.log('Não foi possível apagar a mensagem:', err.message);
-            }
+        // Apaga a mensagem
+        try {
+            await message.delete();
+        } catch (error) {
+            console.log(
+                '❌ Não foi possível apagar a mensagem:',
+                error.message
+            );
+        }
 
-            // Container de aviso
-            const container = new ContainerBuilder()
-                .addTextDisplayComponents(
-                    new TextDisplayBuilder().setContent(
-                        `🔔 | ${message.author} não é possivel mandar links de convites nesse canal!`
-                    )
+        // Aviso
+        const container = new ContainerBuilder()
+            .addTextDisplayComponents(
+                new TextDisplayBuilder().setContent(
+                    `🔔 | ${message.author} não é possivel mandar links de convites nesse canal!`
                 )
-                .addSeparatorComponents(
-                    new SeparatorBuilder()
+            )
+            .addSeparatorComponents(
+                new SeparatorBuilder()
+            )
+            .addTextDisplayComponents(
+                new TextDisplayBuilder().setContent(
+                    '-# VTL Security Bot'
                 )
-                .addTextDisplayComponents(
-                    new TextDisplayBuilder().setContent(
-                        '-# VTL Security Bot'
-                    )
-                );
+            );
 
-            // Tenta responder de forma ephemeral
-            try {
-                await message.channel.send({
-                    components: [container],
-                    flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral
-                });
-            } catch (err) {
-                console.log(
-                    'Não foi possível enviar aviso ephemeral:',
-                    err.message
-                );
-            }
+        /*
+         * OBS:
+         * Mensagens normais enviadas pelo bot não conseguem
+         * ser ephemeral.
+         *
+         * Para fazer um aviso realmente ephemeral,
+         * seria necessário usar uma interação.
+         *
+         * Aqui o bot envia a mensagem normalmente.
+         */
+
+        try {
+            await message.channel.send({
+                components: [container],
+                flags: MessageFlags.IsComponentsV2
+            });
+        } catch (error) {
+            console.log(
+                '❌ Não foi possível enviar o aviso:',
+                error.message
+            );
         }
 
     } catch (error) {
-        console.error('Erro no messageCreate:', error);
+        console.error('Erro no bloqueio de convites:', error);
     }
 });
 
-// ===============================
-// MENSAGEM EXCLUÍDA
-// ===============================
+// ==========================================
+// LOG DE MENSAGEM EXCLUÍDA
+// ==========================================
 
 client.on('messageDelete', async (message) => {
     try {
         if (!message.guild) return;
+
+        // Não registra mensagens do próprio bot
         if (message.author?.bot) return;
 
-        const logChannel = message.guild.channels.cache.get(LOG_CHANNEL_ID);
+        const logChannel =
+            message.guild.channels.cache.get(LOG_CHANNEL_ID);
 
         if (!logChannel) {
             console.log('❌ Canal de logs não encontrado.');
             return;
         }
 
-        // Autor da mensagem
+        // ======================================
+        // AUTOR
+        // ======================================
+
         const author = message.author;
 
         const authorMention = author
@@ -151,55 +167,85 @@ client.on('messageDelete', async (message) => {
             ? author.id
             : 'desconhecido';
 
-        // Conteúdo
-        let content = message.content || '*Mensagem sem conteúdo de texto*';
+        // ======================================
+        // CONTEÚDO
+        // ======================================
 
-        // Limita o tamanho para evitar erro
+        let content =
+            message.content || '*Mensagem sem conteúdo de texto*';
+
         if (content.length > 3500) {
-            content = content.slice(0, 3500) + '...';
+            content =
+                content.slice(0, 3500) + '...';
         }
 
-        // Escapa blocos de código
+        // Evita quebrar o bloco de código
         content = content.replace(/```/g, '\\`\\`\\`');
 
-        // Container principal
+        // ======================================
+        // CONTAINER
+        // ======================================
+
         const container = new ContainerBuilder();
 
-        // Avatar do autor
+        // ======================================
+        // FOTO / AVATAR
+        // ======================================
+
         if (author) {
             const avatarURL = author.displayAvatarURL({
                 extension: 'png',
                 size: 256
             });
 
-            const mediaGallery = new MediaGalleryBuilder()
-                .addItems(
-                    new MediaGalleryItemBuilder()
-                        .setURL(avatarURL)
-                );
+            const mediaGallery =
+                new MediaGalleryBuilder()
+                    .addItems(
+                        new MediaGalleryItemBuilder()
+                            .setURL(avatarURL)
+                    );
 
-            container.addMediaGalleryComponents(mediaGallery);
+            container.addMediaGalleryComponents(
+                mediaGallery
+            );
         }
 
-        // Separador
+        // ======================================
+        // SEPARADOR
+        // ======================================
+
         container.addSeparatorComponents(
             new SeparatorBuilder()
         );
 
-        // Conteúdo do log
+        // ======================================
+        // MENSAGEM
+        // ======================================
+
         container.addTextDisplayComponents(
             new TextDisplayBuilder().setContent(
-                `**Mensagem excluída por ${authorMention} (\`${authorId}\`):**\n\`\`\`\n${content}\n\`\`\``
+                `**Mensagem excluída por: ${authorMention} (\`${authorId}\`)**\n` +
+                `\`\`\`\n${content}\n\`\`\`\n\n` +
+                `**Canal que a mensagem foi excluída:** <#${message.channelId}>`
             )
         );
 
-        // Anexos
-        if (message.attachments && message.attachments.size > 0) {
+        // ======================================
+        // ANEXOS
+        // ======================================
+
+        if (
+            message.attachments &&
+            message.attachments.size > 0
+        ) {
             let attachmentsText = '**Anexos:**\n';
 
-            message.attachments.forEach((attachment) => {
-                attachmentsText += `- [${attachment.name}](${attachment.url})\n`;
-            });
+            message.attachments.forEach(
+                (attachment) => {
+                    attachmentsText +=
+                        `- [${attachment.name}](${attachment.url})\n`;
+                }
+            );
 
             container.addTextDisplayComponents(
                 new TextDisplayBuilder().setContent(
@@ -208,17 +254,27 @@ client.on('messageDelete', async (message) => {
             );
         }
 
-        // Separador final
+        // ======================================
+        // SEPARADOR FINAL
+        // ======================================
+
         container.addSeparatorComponents(
             new SeparatorBuilder()
         );
 
-        // Footer
+        // ======================================
+        // FOOTER
+        // ======================================
+
         container.addTextDisplayComponents(
             new TextDisplayBuilder().setContent(
                 '-# VTL Security Bot'
             )
         );
+
+        // ======================================
+        // ENVIAR LOG
+        // ======================================
 
         await logChannel.send({
             components: [container],
@@ -226,13 +282,16 @@ client.on('messageDelete', async (message) => {
         });
 
     } catch (error) {
-        console.error('Erro no messageDelete:', error);
+        console.error(
+            '❌ Erro no messageDelete:',
+            error
+        );
     }
 });
 
-// ===============================
-// MENSAGEM EDITADA
-// ===============================
+// ==========================================
+// LOG DE MENSAGEM EDITADA
+// ==========================================
 
 client.on('messageUpdate', async (oldMessage, newMessage) => {
     try {
@@ -240,13 +299,24 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
 
         if (newMessage.author?.bot) return;
 
-        // Se não houver alteração no conteúdo
-        if (oldMessage.content === newMessage.content) return;
+        // Se o conteúdo não mudou
+        if (
+            oldMessage.content ===
+            newMessage.content
+        ) {
+            return;
+        }
 
         const logChannel =
-            newMessage.guild.channels.cache.get(LOG_CHANNEL_ID);
+            newMessage.guild.channels.cache.get(
+                LOG_CHANNEL_ID
+            );
 
         if (!logChannel) return;
+
+        // ======================================
+        // AUTOR
+        // ======================================
 
         const author = newMessage.author;
 
@@ -258,75 +328,115 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
             ? author.id
             : 'desconhecido';
 
-        let oldContent =
-            oldMessage.content || '*Sem conteúdo*';
+        // ======================================
+        // MENSAGEM ANTIGA
+        // ======================================
 
-        let newContent =
-            newMessage.content || '*Sem conteúdo*';
+        let oldContent =
+            oldMessage.content ||
+            '*Sem conteúdo*';
 
         if (oldContent.length > 1500) {
-            oldContent = oldContent.slice(0, 1500) + '...';
+            oldContent =
+                oldContent.slice(0, 1500) + '...';
         }
+
+        oldContent =
+            oldContent.replace(
+                /```/g,
+                '\\`\\`\\`'
+            );
+
+        // ======================================
+        // MENSAGEM NOVA
+        // ======================================
+
+        let newContent =
+            newMessage.content ||
+            '*Sem conteúdo*';
 
         if (newContent.length > 1500) {
-            newContent = newContent.slice(0, 1500) + '...';
+            newContent =
+                newContent.slice(0, 1500) + '...';
         }
 
-        oldContent = oldContent.replace(/```/g, '\\`\\`\\`');
-        newContent = newContent.replace(/```/g, '\\`\\`\\`');
+        newContent =
+            newContent.replace(
+                /```/g,
+                '\\`\\`\\`'
+            );
+
+        // ======================================
+        // CONTAINER
+        // ======================================
 
         const container = new ContainerBuilder();
 
         // Avatar
         if (author) {
-            const avatarURL = author.displayAvatarURL({
-                extension: 'png',
-                size: 256
-            });
+            const avatarURL =
+                author.displayAvatarURL({
+                    extension: 'png',
+                    size: 256
+                });
 
-            const mediaGallery = new MediaGalleryBuilder()
-                .addItems(
-                    new MediaGalleryItemBuilder()
-                        .setURL(avatarURL)
-                );
+            const mediaGallery =
+                new MediaGalleryBuilder()
+                    .addItems(
+                        new MediaGalleryItemBuilder()
+                            .setURL(avatarURL)
+                    );
 
-            container.addMediaGalleryComponents(mediaGallery);
+            container.addMediaGalleryComponents(
+                mediaGallery
+            );
         }
 
+        // Separador
         container.addSeparatorComponents(
             new SeparatorBuilder()
         );
 
+        // Conteúdo
         container.addTextDisplayComponents(
             new TextDisplayBuilder().setContent(
-                `**Mensagem editada por ${authorMention} (\`${authorId}\`):**\n\n` +
-                `**Antes:**\n\`\`\`\n${oldContent}\n\`\`\`\n\n` +
-                `**Depois:**\n\`\`\`\n${newContent}\n\`\`\``
+                `**Mensagem editada por: ${authorMention} (\`${authorId}\`)**\n\n` +
+                `**Antes:**\n` +
+                `\`\`\`\n${oldContent}\n\`\`\`\n\n` +
+                `**Depois:**\n` +
+                `\`\`\`\n${newContent}\n\`\`\`\n\n` +
+                `**Canal:** <#${newMessage.channelId}>`
             )
         );
 
+        // Separador
         container.addSeparatorComponents(
             new SeparatorBuilder()
         );
 
+        // Footer
         container.addTextDisplayComponents(
             new TextDisplayBuilder().setContent(
                 '-# VTL Security Bot'
             )
         );
 
+        // Enviar
         await logChannel.send({
             components: [container],
             flags: MessageFlags.IsComponentsV2
         });
 
     } catch (error) {
-        console.error('Erro no messageUpdate:', error);
+        console.error(
+            '❌ Erro no messageUpdate:',
+            error
+        );
     }
 });
 
-// ===============================
+// ==========================================
 // LOGIN
-// ===============================
+// ==========================================
 
 client.login(TOKEN);

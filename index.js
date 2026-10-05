@@ -51,7 +51,7 @@ const ALLOWED_INVITE_CATEGORIES = [
     '1552649476370604214'
 ];
 
-// Mensagens que foram apagadas pelo próprio Security Bot
+// Mensagens apagadas automaticamente pelo Security Bot
 const securityDeletedMessages = new Set();
 
 // ==========================================
@@ -80,13 +80,17 @@ function containsDiscordInvite(content) {
 // ==========================================
 
 async function createMessagePreview(message) {
+
     const width = 1000;
     const height = 190;
 
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext('2d');
 
-    // Fundo estilo Discord
+    // ======================================
+    // FUNDO
+    // ======================================
+
     ctx.fillStyle = '#1e1f22';
     ctx.fillRect(0, 0, width, height);
 
@@ -99,13 +103,17 @@ async function createMessagePreview(message) {
     const avatarSize = 100;
 
     try {
-        if (message.author) {
-            const avatarURL = message.author.displayAvatarURL({
-                extension: 'png',
-                size: 256
-            });
 
-            const avatar = await loadImage(avatarURL);
+        if (message.author) {
+
+            const avatarURL =
+                message.author.displayAvatarURL({
+                    extension: 'png',
+                    size: 256
+                });
+
+            const avatar =
+                await loadImage(avatarURL);
 
             ctx.save();
 
@@ -131,7 +139,9 @@ async function createMessagePreview(message) {
 
             ctx.restore();
         }
+
     } catch (error) {
+
         ctx.fillStyle = '#5865f2';
 
         ctx.beginPath();
@@ -192,7 +202,8 @@ async function createMessagePreview(message) {
     // CONTEÚDO
     // ======================================
 
-    let content = message.content || '';
+    let content =
+        message.content || '';
 
     if (!content && message.attachments?.size) {
         content = '📎 Anexo';
@@ -202,10 +213,12 @@ async function createMessagePreview(message) {
         content = 'Mensagem sem conteúdo';
     }
 
-    content = content.replace(/\n/g, ' ');
+    content =
+        content.replace(/\n/g, ' ');
 
     if (content.length > 85) {
-        content = content.slice(0, 85) + '...';
+        content =
+            content.slice(0, 85) + '...';
     }
 
     ctx.font = '32px Arial';
@@ -225,86 +238,118 @@ async function createMessagePreview(message) {
 // ==========================================
 
 client.on('messageCreate', async (message) => {
+
     try {
+
         if (!message.guild) return;
+
         if (message.author.bot) return;
 
-        if (!containsDiscordInvite(message.content)) return;
-
-        const categoryId = message.channel.parentId;
-
-        // Permitir convites nas categorias autorizadas
-        if (ALLOWED_INVITE_CATEGORIES.includes(categoryId)) {
+        if (!containsDiscordInvite(message.content)) {
             return;
         }
 
-        // ======================================
-        // MARCAR COMO EXCLUÍDA PELO SECURITY BOT
-        // ======================================
+        const categoryId =
+            message.channel.parentId;
 
-        securityDeletedMessages.add(message.id);
+        // ==================================
+        // CATEGORIAS PERMITIDAS
+        // ==================================
 
-        // Limpeza de segurança da memória
+        if (
+            ALLOWED_INVITE_CATEGORIES.includes(
+                categoryId
+            )
+        ) {
+            return;
+        }
+
+        // ==================================
+        // MARCAR MENSAGEM
+        // ==================================
+
+        securityDeletedMessages.add(
+            message.id
+        );
+
         setTimeout(() => {
-            securityDeletedMessages.delete(message.id);
+            securityDeletedMessages.delete(
+                message.id
+            );
         }, 10000);
 
-        // ======================================
-        // APAGAR MENSAGEM
-        // ======================================
+        // ==================================
+        // APAGAR
+        // ==================================
 
         try {
+
             await message.delete();
+
         } catch (error) {
+
             console.log(
                 '❌ Não foi possível apagar a mensagem:',
                 error.message
             );
 
-            securityDeletedMessages.delete(message.id);
+            securityDeletedMessages.delete(
+                message.id
+            );
+
             return;
         }
 
-        // ======================================
+        // ==================================
         // AVISO
-        // ======================================
+        // ==================================
 
-        const container = new ContainerBuilder()
-            .addTextDisplayComponents(
-                new TextDisplayBuilder().setContent(
-                    `🔔 | ${message.author} não é possivel mandar links de convites nesse canal!`
+        const container =
+            new ContainerBuilder()
+
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder()
+                        .setContent(
+                            `🔔 | ${message.author} não é possivel mandar links de convites nesse canal!`
+                        )
                 )
-            )
 
-            .addSeparatorComponents(
-                new SeparatorBuilder()
-            )
-
-            .addTextDisplayComponents(
-                new TextDisplayBuilder().setContent(
-                    '-# VTL Security Bot'
+                .addSeparatorComponents(
+                    new SeparatorBuilder()
                 )
-            );
+
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder()
+                        .setContent(
+                            '-# VTL Security Bot'
+                        )
+                );
 
         try {
-            const warning = await message.channel.send({
-                components: [container],
-                flags: MessageFlags.IsComponentsV2
-            });
 
-            // ==================================
-            // APAGAR AVISO APÓS 3 SEGUNDOS
-            // ==================================
+            const warning =
+                await message.channel.send({
+                    components: [container],
+                    flags:
+                        MessageFlags.IsComponentsV2
+                });
+
+            // Apagar aviso em 3 segundos
 
             setTimeout(async () => {
+
                 try {
+
                     await warning.delete();
+
                 } catch (error) {
-                    // Ignora caso a mensagem já tenha sido apagada
+                    // Ignorar
                 }
+
             }, 3000);
 
         } catch (error) {
+
             console.log(
                 '❌ Erro ao enviar aviso:',
                 error.message
@@ -312,6 +357,7 @@ client.on('messageCreate', async (message) => {
         }
 
     } catch (error) {
+
         console.error(
             '❌ Erro no bloqueio de convites:',
             error
@@ -324,20 +370,33 @@ client.on('messageCreate', async (message) => {
 // ==========================================
 
 client.on('messageDelete', async (message) => {
+
     try {
+
         if (!message.guild) return;
 
-        // ======================================
-        // NÃO LOGAR MENSAGENS APAGADAS PELO BOT
-        // ======================================
+        // ==================================
+        // NÃO LOGAR EXCLUSÕES DO BOT
+        // ==================================
 
-        if (securityDeletedMessages.has(message.id)) {
-            securityDeletedMessages.delete(message.id);
+        if (
+            securityDeletedMessages.has(
+                message.id
+            )
+        ) {
+
+            securityDeletedMessages.delete(
+                message.id
+            );
+
             return;
         }
 
-        // Não registrar mensagens de bots
-        if (message.author?.bot) return;
+        // Não registrar bots
+
+        if (message.author?.bot) {
+            return;
+        }
 
         const logChannel =
             message.guild.channels.cache.get(
@@ -345,85 +404,121 @@ client.on('messageDelete', async (message) => {
             );
 
         if (!logChannel) {
+
             console.log(
                 '❌ Canal de logs não encontrado.'
             );
+
             return;
         }
 
-        // ======================================
+        // ==================================
         // AUTOR
-        // ======================================
+        // ==================================
 
-        const author = message.author;
+        const author =
+            message.author;
 
-        const authorMention = author
-            ? `<@${author.id}>`
-            : 'Usuário desconhecido';
+        const authorMention =
+            author
+                ? `<@${author.id}>`
+                : 'Usuário desconhecido';
 
-        const authorId = author
-            ? author.id
-            : 'desconhecido';
+        const authorId =
+            author
+                ? author.id
+                : 'desconhecido';
 
-        // ======================================
-        // CANAL
-        // ======================================
-
-        const channelName =
-            message.channel?.name ||
-            'Canal desconhecido';
-
-        // ======================================
+        // ==================================
         // CONTEÚDO
-        // ======================================
+        // ==================================
 
         let content =
             message.content ||
             '*Mensagem sem conteúdo de texto*';
 
         if (content.length > 3000) {
+
             content =
-                content.slice(0, 3000) + '...';
+                content.slice(0, 3000) +
+                '...';
         }
 
-        content = content.replace(
-            /```/g,
-            '\\`\\`\\`'
-        );
+        content =
+            content.replace(
+                /```/g,
+                '\\`\\`\\`'
+            );
 
-        // ======================================
+        // ==================================
+        // IMAGENS / GIFS
+        // ==================================
+
+        const imageAttachments = [];
+
+        if (message.attachments?.size) {
+
+            message.attachments.forEach(
+                (attachment) => {
+
+                    const isImage =
+                        attachment.contentType?.startsWith(
+                            'image/'
+                        ) ||
+                        /\.(png|jpg|jpeg|gif|webp)$/i.test(
+                            attachment.name || ''
+                        );
+
+                    if (isImage) {
+
+                        imageAttachments.push(
+                            attachment.url
+                        );
+                    }
+                }
+            );
+        }
+
+        // ==================================
         // PREVIEW
-        // ======================================
+        // ==================================
 
         let previewBuffer = null;
 
         try {
+
             previewBuffer =
-                await createMessagePreview(message);
+                await createMessagePreview(
+                    message
+                );
+
         } catch (error) {
+
             console.log(
                 '⚠️ Erro ao criar preview:',
                 error.message
             );
         }
 
-        // ======================================
+        // ==================================
         // CONTAINER
-        // ======================================
+        // ==================================
 
         const container =
             new ContainerBuilder();
 
-        // ======================================
-        // IMAGEM DA PREVIEW
-        // ======================================
+        // ==================================
+        // PREVIEW
+        // ==================================
 
         if (previewBuffer) {
-            const attachment =
+
+            const previewAttachment =
                 new AttachmentBuilder(
                     previewBuffer,
                     {
-                        name: 'mensagem-deletada.png'
+                        name:
+                            'mensagem-deletada.png'
                     }
                 );
 
@@ -439,74 +534,118 @@ client.on('messageDelete', async (message) => {
             container.addMediaGalleryComponents(
                 mediaGallery
             );
-
-            container.addSeparatorComponents(
-                new SeparatorBuilder()
-            );
-
-            container.addTextDisplayComponents(
-                new TextDisplayBuilder().setContent(
-                    `## 🗑 Mensagem Deletada\n` +
-                    `-# Canal\n` +
-                    `**${channelName}**\n` +
-                    `-# User\n` +
-                    `${authorMention} (\`${authorId}\`)\n` +
-                    `-# Mensagem\n` +
-                    `\`\`\`\n${content}\n\`\`\``
-                )
-            );
-
-            container.addSeparatorComponents(
-                new SeparatorBuilder()
-            );
-
-            container.addTextDisplayComponents(
-                new TextDisplayBuilder().setContent(
-                    '-# VTL Security Bot'
-                )
-            );
-
-            await logChannel.send({
-                files: [attachment],
-                components: [container],
-                flags: MessageFlags.IsComponentsV2
-            });
-
-            return;
         }
 
-        // ======================================
-        // FALLBACK SEM PREVIEW
-        // ======================================
-
-        container.addTextDisplayComponents(
-            new TextDisplayBuilder().setContent(
-                `## 🗑 Mensagem Deletada\n` +
-                `-# Canal\n` +
-                `**${channelName}**\n` +
-                `-# User\n` +
-                `${authorMention} (\`${authorId}\`)\n` +
-                `-# Mensagem\n` +
-                `\`\`\`\n${content}\n\`\`\``
-            )
-        );
+        // ==================================
+        // SEPARADOR
+        // ==================================
 
         container.addSeparatorComponents(
             new SeparatorBuilder()
         );
 
+        // ==================================
+        // TEXTO DO LOG
+        // ==================================
+
+        let logText =
+            `## 🗑 Mensagem Deletada\n` +
+            `-# Canal\n` +
+            `<#${message.channelId}>\n` +
+            `-# User\n` +
+            `${authorMention} (\`${authorId}\`)\n` +
+            `-# Mensagem\n` +
+            `\`\`\`\n${content}\n\`\`\``;
+
+        // ==================================
+        // IMAGEM
+        // ==================================
+
+        if (
+            imageAttachments.length > 0
+        ) {
+
+            logText +=
+                `\n-# Imagem`;
+
+            for (
+                const url
+                of imageAttachments
+            ) {
+
+                logText +=
+                    `\n${url}`;
+            }
+        }
+
         container.addTextDisplayComponents(
-            new TextDisplayBuilder().setContent(
-                '-# VTL Security Bot'
-            )
+            new TextDisplayBuilder()
+                .setContent(logText)
         );
 
-        await logChannel.send({
-            components: [container],
-            flags: MessageFlags.IsComponentsV2
-        });
+        // ==================================
+        // SEPARADOR FINAL
+        // ==================================
+
+        container.addSeparatorComponents(
+            new SeparatorBuilder()
+        );
+
+        // ==================================
+        // FOOTER
+        // ==================================
+
+        container.addTextDisplayComponents(
+            new TextDisplayBuilder()
+                .setContent(
+                    '-# VTL Security Bot'
+                )
+        );
+
+        // ==================================
+        // ENVIAR
+        // ==================================
+
+        if (previewBuffer) {
+
+            const previewAttachment =
+                new AttachmentBuilder(
+                    previewBuffer,
+                    {
+                        name:
+                            'mensagem-deletada.png'
+                    }
+                );
+
+            await logChannel.send({
+
+                files: [
+                    previewAttachment
+                ],
+
+                components: [
+                    container
+                ],
+
+                flags:
+                    MessageFlags.IsComponentsV2
+            });
+
+        } else {
+
+            await logChannel.send({
+
+                components: [
+                    container
+                ],
+
+                flags:
+                    MessageFlags.IsComponentsV2
+            });
+        }
 
     } catch (error) {
+
         console.error(
             '❌ Erro no messageDelete:',
             error
@@ -520,35 +659,30 @@ client.on('messageDelete', async (message) => {
 
 client.on(
     'messageUpdate',
-    async (oldMessage, newMessage) => {
+    async (
+        oldMessage,
+        newMessage
+    ) => {
+
         try {
-            if (!newMessage.guild) return;
 
-            if (newMessage.author?.bot) return;
+            if (!newMessage.guild) {
+                return;
+            }
 
-            // ==================================
-            // TENTAR OBTER CONTEÚDO ANTIGO
-            // ==================================
-
-            if (
-                oldMessage.partial &&
-                newMessage.partial
-            ) {
-                try {
-                    await newMessage.fetch();
-                } catch (error) {
-                    return;
-                }
+            if (newMessage.author?.bot) {
+                return;
             }
 
             // ==================================
-            // VERIFICAR ALTERAÇÃO
+            // VERIFICAR CONTEÚDO
             // ==================================
 
             if (
                 oldMessage.content ===
                 newMessage.content
             ) {
+
                 return;
             }
 
@@ -558,9 +692,11 @@ client.on(
                 );
 
             if (!logChannel) {
+
                 console.log(
                     '❌ Canal de logs não encontrado.'
                 );
+
                 return;
             }
 
@@ -571,21 +707,15 @@ client.on(
             const author =
                 newMessage.author;
 
-            const authorMention = author
-                ? `<@${author.id}>`
-                : 'Usuário desconhecido';
+            const authorMention =
+                author
+                    ? `<@${author.id}>`
+                    : 'Usuário desconhecido';
 
-            const authorId = author
-                ? author.id
-                : 'desconhecido';
-
-            // ==================================
-            // CANAL
-            // ==================================
-
-            const channelName =
-                newMessage.channel?.name ||
-                'Canal desconhecido';
+            const authorId =
+                author
+                    ? author.id
+                    : 'desconhecido';
 
             // ==================================
             // MENSAGEM ANTIGA
@@ -596,8 +726,12 @@ client.on(
                 '*Sem conteúdo*';
 
             if (oldContent.length > 1500) {
+
                 oldContent =
-                    oldContent.slice(0, 1500) + '...';
+                    oldContent.slice(
+                        0,
+                        1500
+                    ) + '...';
             }
 
             oldContent =
@@ -615,8 +749,12 @@ client.on(
                 '*Sem conteúdo*';
 
             if (newContent.length > 1500) {
+
                 newContent =
-                    newContent.slice(0, 1500) + '...';
+                    newContent.slice(
+                        0,
+                        1500
+                    ) + '...';
             }
 
             newContent =
@@ -632,23 +770,29 @@ client.on(
             const container =
                 new ContainerBuilder();
 
-            /*
-             * Tudo fica no mesmo TextDisplay para
-             * evitar espaços extras entre os campos.
-             */
+            // ==================================
+            // TEXTO
+            // ==================================
 
             container.addTextDisplayComponents(
-                new TextDisplayBuilder().setContent(
-                    `## 📝 Mensagem editada\n` +
-                    `-# Canal\n` +
-                    `**${channelName}**\n` +
-                    `-# User\n` +
-                    `${authorMention} (\`${authorId}\`)\n` +
-                    `-# Mensagem Antiga\n` +
-                    `\`\`\`\n${oldContent}\n\`\`\`\n` +
-                    `-# Mensagem nova\n` +
-                    `\`\`\`\n${newContent}\n\`\`\``
-                )
+
+                new TextDisplayBuilder()
+                    .setContent(
+
+                        `## 📝 Mensagem editada\n` +
+
+                        `-# Canal\n` +
+                        `<#${newMessage.channelId}>\n` +
+
+                        `-# User\n` +
+                        `${authorMention} (\`${authorId}\`)\n` +
+
+                        `-# Mensagem Antiga\n` +
+                        `\`\`\`\n${oldContent}\n\`\`\`\n` +
+
+                        `-# Mensagem nova\n` +
+                        `\`\`\`\n${newContent}\n\`\`\``
+                    )
             );
 
             // ==================================
@@ -664,9 +808,11 @@ client.on(
             // ==================================
 
             container.addTextDisplayComponents(
-                new TextDisplayBuilder().setContent(
-                    '-# VTL Security Bot'
-                )
+
+                new TextDisplayBuilder()
+                    .setContent(
+                        '-# VTL Security Bot'
+                    )
             );
 
             // ==================================
@@ -674,11 +820,17 @@ client.on(
             // ==================================
 
             await logChannel.send({
-                components: [container],
-                flags: MessageFlags.IsComponentsV2
+
+                components: [
+                    container
+                ],
+
+                flags:
+                    MessageFlags.IsComponentsV2
             });
 
         } catch (error) {
+
             console.error(
                 '❌ Erro no messageUpdate:',
                 error

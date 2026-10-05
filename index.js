@@ -51,6 +51,9 @@ const ALLOWED_INVITE_CATEGORIES = [
     '1552649476370604214'
 ];
 
+// Mensagens que foram apagadas pelo próprio Security Bot
+const securityDeletedMessages = new Set();
+
 // ==========================================
 // BOT ONLINE
 // ==========================================
@@ -60,7 +63,7 @@ client.once('ready', () => {
 });
 
 // ==========================================
-// DETECTAR CONVITE
+// DETECTAR LINK DE CONVITE
 // ==========================================
 
 function containsDiscordInvite(content) {
@@ -83,7 +86,7 @@ async function createMessagePreview(message) {
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext('2d');
 
-    // Fundo parecido com Discord
+    // Fundo estilo Discord
     ctx.fillStyle = '#1e1f22';
     ctx.fillRect(0, 0, width, height);
 
@@ -107,6 +110,7 @@ async function createMessagePreview(message) {
             ctx.save();
 
             ctx.beginPath();
+
             ctx.arc(
                 avatarX + avatarSize / 2,
                 avatarY + avatarSize / 2,
@@ -128,10 +132,10 @@ async function createMessagePreview(message) {
             ctx.restore();
         }
     } catch (error) {
-        // Avatar padrão caso não consiga carregar
         ctx.fillStyle = '#5865f2';
 
         ctx.beginPath();
+
         ctx.arc(
             avatarX + avatarSize / 2,
             avatarY + avatarSize / 2,
@@ -147,7 +151,8 @@ async function createMessagePreview(message) {
     // NOME
     // ======================================
 
-    const username = message.author?.displayName ||
+    const username =
+        message.author?.displayName ||
         message.author?.username ||
         'Usuário';
 
@@ -187,9 +192,7 @@ async function createMessagePreview(message) {
     // CONTEÚDO
     // ======================================
 
-    let content =
-        message.content ||
-        '';
+    let content = message.content || '';
 
     if (!content && message.attachments?.size) {
         content = '📎 Anexo';
@@ -199,13 +202,11 @@ async function createMessagePreview(message) {
         content = 'Mensagem sem conteúdo';
     }
 
-    // Limitar tamanho
+    content = content.replace(/\n/g, ' ');
+
     if (content.length > 85) {
         content = content.slice(0, 85) + '...';
     }
-
-    // Evitar quebra visual
-    content = content.replace(/\n/g, ' ');
 
     ctx.font = '32px Arial';
     ctx.fillStyle = '#dbdee1';
@@ -232,12 +233,26 @@ client.on('messageCreate', async (message) => {
 
         const categoryId = message.channel.parentId;
 
-        // Categorias liberadas
+        // Permitir convites nas categorias autorizadas
         if (ALLOWED_INVITE_CATEGORIES.includes(categoryId)) {
             return;
         }
 
-        // Apagar mensagem
+        // ======================================
+        // MARCAR COMO EXCLUÍDA PELO SECURITY BOT
+        // ======================================
+
+        securityDeletedMessages.add(message.id);
+
+        // Limpeza de segurança da memória
+        setTimeout(() => {
+            securityDeletedMessages.delete(message.id);
+        }, 10000);
+
+        // ======================================
+        // APAGAR MENSAGEM
+        // ======================================
+
         try {
             await message.delete();
         } catch (error) {
@@ -245,6 +260,9 @@ client.on('messageCreate', async (message) => {
                 '❌ Não foi possível apagar a mensagem:',
                 error.message
             );
+
+            securityDeletedMessages.delete(message.id);
+            return;
         }
 
         // ======================================
@@ -268,18 +286,24 @@ client.on('messageCreate', async (message) => {
                 )
             );
 
-        /*
-         * IMPORTANTE:
-         * O Discord não permite que uma mensagem criada
-         * pelo evento messageCreate seja ephemeral.
-         * Ephemeral só funciona em interações.
-         */
-
         try {
-            await message.channel.send({
+            const warning = await message.channel.send({
                 components: [container],
                 flags: MessageFlags.IsComponentsV2
             });
+
+            // ==================================
+            // APAGAR AVISO APÓS 3 SEGUNDOS
+            // ==================================
+
+            setTimeout(async () => {
+                try {
+                    await warning.delete();
+                } catch (error) {
+                    // Ignora caso a mensagem já tenha sido apagada
+                }
+            }, 3000);
+
         } catch (error) {
             console.log(
                 '❌ Erro ao enviar aviso:',
@@ -303,6 +327,16 @@ client.on('messageDelete', async (message) => {
     try {
         if (!message.guild) return;
 
+        // ======================================
+        // NÃO LOGAR MENSAGENS APAGADAS PELO BOT
+        // ======================================
+
+        if (securityDeletedMessages.has(message.id)) {
+            securityDeletedMessages.delete(message.id);
+            return;
+        }
+
+        // Não registrar mensagens de bots
         if (message.author?.bot) return;
 
         const logChannel =
@@ -358,17 +392,17 @@ client.on('messageDelete', async (message) => {
         );
 
         // ======================================
-        // GERAR PREVIEW
+        // PREVIEW
         // ======================================
 
-        let previewBuffer;
+        let previewBuffer = null;
 
         try {
             previewBuffer =
                 await createMessagePreview(message);
         } catch (error) {
             console.log(
-                '⚠️ Não foi possível gerar preview:',
+                '⚠️ Erro ao criar preview:',
                 error.message
             );
         }
@@ -381,7 +415,7 @@ client.on('messageDelete', async (message) => {
             new ContainerBuilder();
 
         // ======================================
-        // PREVIEW
+        // IMAGEM DA PREVIEW
         // ======================================
 
         if (previewBuffer) {
@@ -405,10 +439,6 @@ client.on('messageDelete', async (message) => {
             container.addMediaGalleryComponents(
                 mediaGallery
             );
-
-            // ==================================
-            // ENVIAR COM ANEXO MAIS ABAIXO
-            // ==================================
 
             container.addSeparatorComponents(
                 new SeparatorBuilder()
@@ -448,10 +478,6 @@ client.on('messageDelete', async (message) => {
         // ======================================
         // FALLBACK SEM PREVIEW
         // ======================================
-
-        container.addSeparatorComponents(
-            new SeparatorBuilder()
-        );
 
         container.addTextDisplayComponents(
             new TextDisplayBuilder().setContent(
@@ -500,7 +526,25 @@ client.on(
 
             if (newMessage.author?.bot) return;
 
-            // Só registra se o texto mudou
+            // ==================================
+            // TENTAR OBTER CONTEÚDO ANTIGO
+            // ==================================
+
+            if (
+                oldMessage.partial &&
+                newMessage.partial
+            ) {
+                try {
+                    await newMessage.fetch();
+                } catch (error) {
+                    return;
+                }
+            }
+
+            // ==================================
+            // VERIFICAR ALTERAÇÃO
+            // ==================================
+
             if (
                 oldMessage.content ===
                 newMessage.content
@@ -588,6 +632,11 @@ client.on(
             const container =
                 new ContainerBuilder();
 
+            /*
+             * Tudo fica no mesmo TextDisplay para
+             * evitar espaços extras entre os campos.
+             */
+
             container.addTextDisplayComponents(
                 new TextDisplayBuilder().setContent(
                     `## 📝 Mensagem editada\n` +
@@ -602,15 +651,27 @@ client.on(
                 )
             );
 
+            // ==================================
+            // SEPARADOR
+            // ==================================
+
             container.addSeparatorComponents(
                 new SeparatorBuilder()
             );
+
+            // ==================================
+            // FOOTER
+            // ==================================
 
             container.addTextDisplayComponents(
                 new TextDisplayBuilder().setContent(
                     '-# VTL Security Bot'
                 )
             );
+
+            // ==================================
+            // ENVIAR
+            // ==================================
 
             await logChannel.send({
                 components: [container],

@@ -19,6 +19,7 @@ const client = new Client({
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent
     ],
+
     partials: [
         Partials.Message,
         Partials.Channel,
@@ -72,7 +73,6 @@ client.on('messageCreate', async (message) => {
 
         if (!containsDiscordInvite(message.content)) return;
 
-        // Categoria do canal
         const categoryId = message.channel.parentId;
 
         // Categorias onde convites são permitidos
@@ -80,7 +80,7 @@ client.on('messageCreate', async (message) => {
             return;
         }
 
-        // Apaga a mensagem
+        // Apagar mensagem
         try {
             await message.delete();
         } catch (error) {
@@ -97,25 +97,16 @@ client.on('messageCreate', async (message) => {
                     `🔔 | ${message.author} não é possivel mandar links de convites nesse canal!`
                 )
             )
+
             .addSeparatorComponents(
                 new SeparatorBuilder()
             )
+
             .addTextDisplayComponents(
                 new TextDisplayBuilder().setContent(
                     '-# VTL Security Bot'
                 )
             );
-
-        /*
-         * OBS:
-         * Mensagens normais enviadas pelo bot não conseguem
-         * ser ephemeral.
-         *
-         * Para fazer um aviso realmente ephemeral,
-         * seria necessário usar uma interação.
-         *
-         * Aqui o bot envia a mensagem normalmente.
-         */
 
         try {
             await message.channel.send({
@@ -130,19 +121,22 @@ client.on('messageCreate', async (message) => {
         }
 
     } catch (error) {
-        console.error('Erro no bloqueio de convites:', error);
+        console.error(
+            '❌ Erro no bloqueio de convites:',
+            error
+        );
     }
 });
 
 // ==========================================
-// LOG DE MENSAGEM EXCLUÍDA
+// MENSAGEM DELETADA
 // ==========================================
 
 client.on('messageDelete', async (message) => {
     try {
         if (!message.guild) return;
 
-        // Não registra mensagens do próprio bot
+        // Não registrar mensagens do próprio bot
         if (message.author?.bot) return;
 
         const logChannel =
@@ -168,19 +162,28 @@ client.on('messageDelete', async (message) => {
             : 'desconhecido';
 
         // ======================================
+        // CANAL
+        // ======================================
+
+        const channelName = message.channel?.name
+            ? message.channel.name
+            : 'Canal desconhecido';
+
+        // ======================================
         // CONTEÚDO
         // ======================================
 
         let content =
-            message.content || '*Mensagem sem conteúdo de texto*';
+            message.content ||
+            '*Mensagem sem conteúdo de texto*';
 
-        if (content.length > 3500) {
+        if (content.length > 3000) {
             content =
-                content.slice(0, 3500) + '...';
+                content.slice(0, 3000) + '...';
         }
 
-        // Evita quebrar o bloco de código
-        content = content.replace(/```/g, '\\`\\`\\`');
+        content =
+            content.replace(/```/g, '\\`\\`\\`');
 
         // ======================================
         // CONTAINER
@@ -189,25 +192,31 @@ client.on('messageDelete', async (message) => {
         const container = new ContainerBuilder();
 
         // ======================================
-        // FOTO / AVATAR
+        // IMAGEM ANEXADA
         // ======================================
 
-        if (author) {
-            const avatarURL = author.displayAvatarURL({
-                extension: 'png',
-                size: 256
-            });
+        if (
+            message.attachments &&
+            message.attachments.size > 0
+        ) {
+            const firstAttachment =
+                message.attachments.first();
 
-            const mediaGallery =
-                new MediaGalleryBuilder()
-                    .addItems(
-                        new MediaGalleryItemBuilder()
-                            .setURL(avatarURL)
-                    );
+            if (
+                firstAttachment &&
+                firstAttachment.contentType?.startsWith('image/')
+            ) {
+                const mediaGallery =
+                    new MediaGalleryBuilder()
+                        .addItems(
+                            new MediaGalleryItemBuilder()
+                                .setURL(firstAttachment.url)
+                        );
 
-            container.addMediaGalleryComponents(
-                mediaGallery
-            );
+                container.addMediaGalleryComponents(
+                    mediaGallery
+                );
+            }
         }
 
         // ======================================
@@ -219,14 +228,21 @@ client.on('messageDelete', async (message) => {
         );
 
         // ======================================
-        // MENSAGEM
+        // INFORMAÇÕES
         // ======================================
 
         container.addTextDisplayComponents(
             new TextDisplayBuilder().setContent(
-                `**Mensagem excluída por: ${authorMention} (\`${authorId}\`)**\n` +
-                `\`\`\`\n${content}\n\`\`\`\n\n` +
-                `**Canal que a mensagem foi excluída:** <#${message.channelId}>`
+                `## 🗑 Mensagem Deletada\n\n` +
+
+                `-# Canal\n` +
+                `**${channelName}**\n\n` +
+
+                `-# User\n` +
+                `${authorMention} (\`${authorId}\`)\n\n` +
+
+                `-# Mensagem\n` +
+                `\`\`\`\n${content}\n\`\`\``
             )
         );
 
@@ -238,7 +254,8 @@ client.on('messageDelete', async (message) => {
             message.attachments &&
             message.attachments.size > 0
         ) {
-            let attachmentsText = '**Anexos:**\n';
+            let attachmentsText =
+                '**Anexos:**\n';
 
             message.attachments.forEach(
                 (attachment) => {
@@ -268,7 +285,7 @@ client.on('messageDelete', async (message) => {
 
         container.addTextDisplayComponents(
             new TextDisplayBuilder().setContent(
-                '-# VTL Security Bot'
+                'VTL Security Bot'
             )
         );
 
@@ -290,16 +307,17 @@ client.on('messageDelete', async (message) => {
 });
 
 // ==========================================
-// LOG DE MENSAGEM EDITADA
+// MENSAGEM EDITADA
 // ==========================================
 
 client.on('messageUpdate', async (oldMessage, newMessage) => {
     try {
         if (!newMessage.guild) return;
 
+        // Não registrar mensagens do próprio bot
         if (newMessage.author?.bot) return;
 
-        // Se o conteúdo não mudou
+        // Se o conteúdo não mudou, não registrar
         if (
             oldMessage.content ===
             newMessage.content
@@ -312,7 +330,10 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
                 LOG_CHANNEL_ID
             );
 
-        if (!logChannel) return;
+        if (!logChannel) {
+            console.log('❌ Canal de logs não encontrado.');
+            return;
+        }
 
         // ======================================
         // AUTOR
@@ -327,6 +348,15 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
         const authorId = author
             ? author.id
             : 'desconhecido';
+
+        // ======================================
+        // CANAL
+        // ======================================
+
+        const channelName =
+            newMessage.channel?.name
+                ? newMessage.channel.name
+                : 'Canal desconhecido';
 
         // ======================================
         // MENSAGEM ANTIGA
@@ -370,58 +400,61 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
         // CONTAINER
         // ======================================
 
-        const container = new ContainerBuilder();
+        const container =
+            new ContainerBuilder();
 
-        // Avatar
-        if (author) {
-            const avatarURL =
-                author.displayAvatarURL({
-                    extension: 'png',
-                    size: 256
-                });
+        // ======================================
+        // SEPARADOR
+        // ======================================
 
-            const mediaGallery =
-                new MediaGalleryBuilder()
-                    .addItems(
-                        new MediaGalleryItemBuilder()
-                            .setURL(avatarURL)
-                    );
-
-            container.addMediaGalleryComponents(
-                mediaGallery
-            );
-        }
-
-        // Separador
         container.addSeparatorComponents(
             new SeparatorBuilder()
         );
 
-        // Conteúdo
+        // ======================================
+        // INFORMAÇÕES
+        // ======================================
+
         container.addTextDisplayComponents(
             new TextDisplayBuilder().setContent(
-                `**Mensagem editada por: ${authorMention} (\`${authorId}\`)**\n\n` +
-                `**Antes:**\n` +
+                `## 📝 Mensagem editada\n\n` +
+
+                `-# Canal\n` +
+                `**${channelName}**\n\n` +
+
+                `-# User\n` +
+                `${authorMention} (\`${authorId}\`)\n\n` +
+
+                `-# Mensagem Antiga\n` +
                 `\`\`\`\n${oldContent}\n\`\`\`\n\n` +
-                `**Depois:**\n` +
-                `\`\`\`\n${newContent}\n\`\`\`\n\n` +
-                `**Canal:** <#${newMessage.channelId}>`
+
+                `-# Mensagem nova\n` +
+                `\`\`\`\n${newContent}\n\`\`\``
             )
         );
 
-        // Separador
+        // ======================================
+        // SEPARADOR FINAL
+        // ======================================
+
         container.addSeparatorComponents(
             new SeparatorBuilder()
         );
 
-        // Footer
+        // ======================================
+        // FOOTER
+        // ======================================
+
         container.addTextDisplayComponents(
             new TextDisplayBuilder().setContent(
-                '-# VTL Security Bot'
+                'VTL Security Bot'
             )
         );
 
-        // Enviar
+        // ======================================
+        // ENVIAR LOG
+        // ======================================
+
         await logChannel.send({
             components: [container],
             flags: MessageFlags.IsComponentsV2

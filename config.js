@@ -1,0 +1,3 @@
+module.exports = {
+    TICKET_CATEGORY_ID: '1558828619264950282'
+};

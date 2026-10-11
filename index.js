@@ -16,13 +16,16 @@ const {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
-    ChannelType
+    ChannelType,
+    ModalBuilder,
+    TextInputBuilder,
+    TextInputStyle,
+    StringSelectMenuBuilder
 } = require('discord.js');
 
-const {
-    createCanvas,
-    loadImage
-} = require('@napi-rs/canvas');
+const { createCanvas, loadImage } = require('@napi-rs/canvas');
+const path = require('path');
+const config = require('./config');
 
 require('./keep_alive');
 
@@ -44,11 +47,10 @@ const client = new Client({
 const TOKEN = process.env.TOKEN;
 
 // =========================
-// CONFIGURAÇÕES
+// CONFIGURAÇÕES DE SEGURANÇA
 // =========================
 
 const LOG_CHANNEL_ID = '1556626740569444422';
-
 const WARN_LOG_CHANNEL_ID = '1554500648450392155';
 
 const ALLOWED_INVITE_CATEGORIES = [
@@ -56,27 +58,41 @@ const ALLOWED_INVITE_CATEGORIES = [
     '1552649476370604214'
 ];
 
-// Cargos de warn
 const WARN_1_ROLE_ID = '1556667619291955230';
 const WARN_2_ROLE_ID = '1556667697616519230';
 
-// Quem pode aplicar warn
 const WARN_ALLOWED_ROLES = [
     '1552650098637541448',
     '1554508476510900226'
 ];
 
-// Link do STJD
 const STJD_URL = 'https://discord.gg/zXdZ9SwTG';
-
-// Nome do bot
 const BOT_FOOTER = '-# PML • Bot Security';
 
+const securityDeletedMessages = new Set();
+
 // =========================
-// CONTROLE DE MENSAGENS
+// CONFIGURAÇÕES DE TICKETS
 // =========================
 
-const securityDeletedMessages = new Set();
+const TICKET_CATEGORY_ID = config.TICKET_CATEGORY_ID;
+
+// Cargo de staff corrigido
+const STAFF_ROLE_ID = '1558824924120879216';
+
+// Canal onde o painel será enviado
+const TICKET_PANEL_CHANNEL_ID = '1556721027940352070';
+
+const TICKET_FOOTER = '-# PML • TICKET SYSTEM';
+
+const TICKET_DENUNCIA = 'ticket_denuncia';
+const TICKET_APPEAL = 'ticket_appeal';
+
+const TICKET_SELECT = 'ticket_tipo_select';
+
+const CLOSE_TICKET = 'fechar_ticket';
+const CONFIRM_CLOSE_TICKET = 'confirmar_fechar_ticket';
+const CANCEL_CLOSE_TICKET = 'cancelar_fechar_ticket';
 
 // =========================
 // SLASH COMMANDS
@@ -122,6 +138,13 @@ const commands = [
                     ChannelType.GuildText,
                     ChannelType.GuildAnnouncement
                 )
+        ),
+
+    new SlashCommandBuilder()
+        .setName('ticket')
+        .setDescription('Envia o painel de atendimento de tickets.')
+        .setDefaultMemberPermissions(
+            PermissionFlagsBits.Administrator
         )
 ].map(command => command.toJSON());
 
@@ -166,7 +189,7 @@ client.once('ready', async () => {
 });
 
 // =========================
-// DETECTAR CONVITE DISCORD
+// DETECTAR CONVITES DISCORD
 // =========================
 
 function containsDiscordInvite(content) {
@@ -250,7 +273,6 @@ async function createMessagePreview(message) {
 
     ctx.font = 'bold 31px Arial';
     ctx.fillStyle = '#f2f3f5';
-
     ctx.fillText(username, 165, 70);
 
     ctx.font = '20px Arial';
@@ -283,7 +305,6 @@ async function createMessagePreview(message) {
 
     ctx.font = '32px Arial';
     ctx.fillStyle = '#dbdee1';
-
     ctx.fillText(content, 165, 145);
 
     return canvas.encode('png');
@@ -295,16 +316,15 @@ async function createMessagePreview(message) {
 
 client.on('messageCreate', async message => {
     try {
-        if (!message.guild) return;
-        if (message.author.bot) return;
+        if (!message.guild || message.author.bot) return;
 
-        if (!containsDiscordInvite(message.content)) {
-            return;
-        }
+        if (!containsDiscordInvite(message.content)) return;
 
-        const categoryId = message.channel.parentId;
-
-        if (ALLOWED_INVITE_CATEGORIES.includes(categoryId)) {
+        if (
+            ALLOWED_INVITE_CATEGORIES.includes(
+                message.channel.parentId
+            )
+        ) {
             return;
         }
 
@@ -336,7 +356,9 @@ client.on('messageCreate', async message => {
                 new SeparatorBuilder()
             )
             .addTextDisplayComponents(
-                new TextDisplayBuilder().setContent(BOT_FOOTER)
+                new TextDisplayBuilder().setContent(
+                    BOT_FOOTER
+                )
             );
 
         try {
@@ -440,7 +462,9 @@ client.on('messageDelete', async message => {
             const mediaGallery = new MediaGalleryBuilder()
                 .addItems(
                     new MediaGalleryItemBuilder()
-                        .setURL('attachment://mensagem-deletada.png')
+                        .setURL(
+                            'attachment://mensagem-deletada.png'
+                        )
                 );
 
             container.addMediaGalleryComponents(mediaGallery);
@@ -512,12 +536,9 @@ client.on('messageDelete', async message => {
 
 client.on('messageUpdate', async (oldMessage, newMessage) => {
     try {
-        if (!newMessage.guild) return;
-        if (newMessage.author?.bot) return;
+        if (!newMessage.guild || newMessage.author?.bot) return;
 
-        if (oldMessage.content === newMessage.content) {
-            return;
-        }
+        if (oldMessage.content === newMessage.content) return;
 
         const logChannel =
             newMessage.guild.channels.cache.get(LOG_CHANNEL_ID);
@@ -587,7 +608,7 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
 });
 
 // =========================
-// VERIFICAR PERMISSÃO DO WARN
+// FUNÇÕES DO SISTEMA DE WARN
 // =========================
 
 function canUseWarn(member) {
@@ -606,13 +627,754 @@ function canUseWarn(member) {
     );
 }
 
+async function sendWarnLog(guild, container) {
+    try {
+        const channel =
+            guild.channels.cache.get(WARN_LOG_CHANNEL_ID);
+
+        if (!channel) {
+            console.log(
+                '❌ Canal de logs de warn não encontrado.'
+            );
+            return;
+        }
+
+        await channel.send({
+            components: [container],
+            flags: MessageFlags.IsComponentsV2
+        });
+    } catch (error) {
+        console.error(
+            '❌ Erro ao enviar log do warn:',
+            error
+        );
+    }
+}
+
+async function sendWarnDM(member, content) {
+    try {
+        const container = new ContainerBuilder()
+            .addTextDisplayComponents(
+                new TextDisplayBuilder().setContent(
+                    `${content}\n\n${BOT_FOOTER}`
+                )
+            );
+
+        await member.send({
+            components: [container],
+            flags: MessageFlags.IsComponentsV2
+        });
+    } catch (error) {
+        console.log(
+            `⚠️ Não foi possível enviar DM para ${member.user.tag}.`
+        );
+    }
+}
+
 // =========================
-// INTERAÇÕES: /SAY E /WARN
+// SISTEMA DE TICKETS
+// =========================
+
+function criarPainelTicket() {
+    const topoPath = path.join(
+        __dirname,
+        'imagens',
+        'ticket_topo.png'
+    );
+
+    const logoPath = path.join(
+        __dirname,
+        'imagens',
+        'utl_logo.png'
+    );
+
+    const container = new ContainerBuilder()
+        .addMediaGalleryComponents(
+            new MediaGalleryBuilder().addItems(
+                new MediaGalleryItemBuilder()
+                    .setURL('attachment://ticket_topo.png')
+            )
+        )
+        .addSeparatorComponents(
+            new SeparatorBuilder()
+        )
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(
+                '## 🎫 Central de Atendimento\n\n' +
+                'Selecione uma opção abaixo para entrar em contato com a equipe da PML.'
+            )
+        )
+        .addSeparatorComponents(
+            new SeparatorBuilder()
+        )
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(
+                '📢 **Denúncia** — Denuncie um membro ou apresente uma situação à equipe.\n' +
+                '⚖️ **Appeal** — Solicite uma revisão de uma punição.'
+            )
+        )
+        .addSeparatorComponents(
+            new SeparatorBuilder()
+        );
+
+    const menu = new StringSelectMenuBuilder()
+        .setCustomId(TICKET_SELECT)
+        .setPlaceholder('Selecione o tipo de atendimento...')
+        .addOptions(
+            {
+                label: 'Denúncia',
+                description: 'Enviar uma denúncia à equipe.',
+                value: TICKET_DENUNCIA,
+                emoji: '📢'
+            },
+            {
+                label: 'Appeal',
+                description: 'Solicitar revisão de uma punição.',
+                value: TICKET_APPEAL,
+                emoji: '⚖️'
+            }
+        );
+
+    container.addActionRowComponents(
+        new ActionRowBuilder().addComponents(menu)
+    );
+
+    container.addSeparatorComponents(
+        new SeparatorBuilder()
+    );
+
+    container.addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(TICKET_FOOTER)
+    );
+
+    return {
+        container,
+        files: [
+            {
+                attachment: topoPath,
+                name: 'ticket_topo.png'
+            },
+            {
+                attachment: logoPath,
+                name: 'utl_logo.png'
+            }
+        ]
+    };
+}
+
+// =========================
+// CONTAINER DO TICKET ABERTO
+// =========================
+
+function criarTicketContainer({ user, tipo, conteudo }) {
+    const ticketImagePath = path.join(
+        __dirname,
+        'imagens',
+        'ticket_aberto_v2.png'
+    );
+
+    const container = new ContainerBuilder()
+        .addMediaGalleryComponents(
+            new MediaGalleryBuilder().addItems(
+                new MediaGalleryItemBuilder()
+                    .setURL('attachment://ticket_aberto_v2.png')
+            )
+        )
+        .addSeparatorComponents(
+            new SeparatorBuilder()
+        )
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(
+                `## 🎫 TICKET ABERTO\n\n` +
+                `**Usuário:** ${user}\n` +
+                `**ID:** \`${user.id}\`\n\n` +
+                `**Tipo:** ${tipo}`
+            )
+        )
+        .addSeparatorComponents(
+            new SeparatorBuilder()
+        )
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(
+                `**Atendimento:** <@&${STAFF_ROLE_ID}>\n\n${conteudo}`
+            )
+        )
+        .addSeparatorComponents(
+            new SeparatorBuilder()
+        )
+        .addActionRowComponents(
+            new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(CLOSE_TICKET)
+                    .setLabel('Fechar Ticket')
+                    .setEmoji('🔒')
+                    .setStyle(ButtonStyle.Danger)
+            )
+        )
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(TICKET_FOOTER)
+        );
+
+    return {
+        container,
+        files: [
+            {
+                attachment: ticketImagePath,
+                name: 'ticket_aberto_v2.png'
+            }
+        ]
+    };
+}
+
+// =========================
+// CRIAR CANAL DE TICKET
+// =========================
+
+async function criarCanalTicket(interaction, tipo, conteudo) {
+    const guild = interaction.guild;
+
+    if (!guild) {
+        return interaction.reply({
+            content: '❌ Este sistema só pode ser usado dentro do servidor.',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+
+    if (!TICKET_CATEGORY_ID || !STAFF_ROLE_ID) {
+        return interaction.reply({
+            content: '❌ A categoria de tickets não está configurada. Confira TICKET_CATEGORY_ID no config.js.',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+
+    const ticketExistente = guild.channels.cache.find(
+        channel =>
+            channel.parentId === TICKET_CATEGORY_ID &&
+            channel.topic === `ticket:${interaction.user.id}`
+    );
+
+    if (ticketExistente) {
+        return interaction.reply({
+            content: `❌ Você já possui um ticket aberto: ${ticketExistente}`,
+            flags: MessageFlags.Ephemeral
+        });
+    }
+
+    let channel;
+
+    try {
+        channel = await guild.channels.create({
+            name:
+                `ticket-${interaction.user.username}`
+                    .toLowerCase()
+                    .replace(/[^a-z0-9-]/g, '')
+                    .slice(0, 90) ||
+                `ticket-${interaction.user.id}`,
+
+            type: ChannelType.GuildText,
+            parent: TICKET_CATEGORY_ID,
+            topic: `ticket:${interaction.user.id}`,
+
+            permissionOverwrites: [
+                {
+                    id: guild.id,
+                    deny: [
+                        PermissionFlagsBits.ViewChannel
+                    ]
+                },
+                {
+                    id: interaction.user.id,
+                    allow: [
+                        PermissionFlagsBits.ViewChannel,
+                        PermissionFlagsBits.SendMessages,
+                        PermissionFlagsBits.ReadMessageHistory,
+                        PermissionFlagsBits.AttachFiles
+                    ]
+                },
+                {
+                    id: STAFF_ROLE_ID,
+                    allow: [
+                        PermissionFlagsBits.ViewChannel,
+                        PermissionFlagsBits.SendMessages,
+                        PermissionFlagsBits.ReadMessageHistory,
+                        PermissionFlagsBits.AttachFiles
+                    ]
+                }
+            ]
+        });
+    } catch (error) {
+        console.error(
+            '❌ Erro ao criar canal de ticket:',
+            error
+        );
+
+        return interaction.reply({
+            content: '❌ Não consegui criar o canal do ticket. Verifique as permissões do bot e a categoria configurada.',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+
+    try {
+        const ticket = criarTicketContainer({
+            user: interaction.user,
+            tipo,
+            conteudo
+        });
+
+        await channel.send({
+            components: [ticket.container],
+            files: ticket.files,
+            flags: MessageFlags.IsComponentsV2
+        });
+    } catch (error) {
+        console.error(
+            '❌ Erro ao enviar painel do ticket:',
+            error
+        );
+
+        await channel.delete().catch(() => {});
+
+        return interaction.reply({
+            content: '❌ Não foi possível configurar o ticket. Verifique se as imagens existem na pasta imagens e as permissões do bot.',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+
+    return interaction.reply({
+        content: `✅ Seu ticket foi criado: ${channel}`,
+        flags: MessageFlags.Ephemeral
+    });
+}
+
+// =========================
+// MODAL DE DENÚNCIA
+// =========================
+
+function abrirModalDenuncia(interaction) {
+    const modal = new ModalBuilder()
+        .setCustomId('modal_ticket_denuncia')
+        .setTitle('Denúncia');
+
+    const denunciado = new TextInputBuilder()
+        .setCustomId('denunciado')
+        .setLabel('Quem você deseja denunciar?')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMaxLength(100);
+
+    const motivo = new TextInputBuilder()
+        .setCustomId('motivo_denuncia')
+        .setLabel('Explique o motivo da denúncia')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true)
+        .setMaxLength(2000);
+
+    const provas = new TextInputBuilder()
+        .setCustomId('provas_denuncia')
+        .setLabel('Links de provas (se houver)')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(false)
+        .setMaxLength(1000);
+
+    modal.addComponents(
+        new ActionRowBuilder().addComponents(denunciado),
+        new ActionRowBuilder().addComponents(motivo),
+        new ActionRowBuilder().addComponents(provas)
+    );
+
+    return interaction.showModal(modal);
+}
+
+// =========================
+// MODAL DE APPEAL
+// =========================
+
+function abrirModalAppeal(interaction) {
+    const modal = new ModalBuilder()
+        .setCustomId('modal_ticket_appeal')
+        .setTitle('Appeal');
+
+    const punicao = new TextInputBuilder()
+        .setCustomId('punicao_appeal')
+        .setLabel('Qual punição você deseja recorrer?')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMaxLength(150);
+
+    const motivo = new TextInputBuilder()
+        .setCustomId('motivo_appeal')
+        .setLabel('Por que devemos revisar a punição?')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true)
+        .setMaxLength(2000);
+
+    modal.addComponents(
+        new ActionRowBuilder().addComponents(punicao),
+        new ActionRowBuilder().addComponents(motivo)
+    );
+
+    return interaction.showModal(modal);
+}
+
+// =========================
+// CONFIRMAÇÃO DE FECHAMENTO
+// =========================
+
+function criarContainerConfirmacao(user) {
+    return new ContainerBuilder()
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(
+                `⚠️ | ${user} Você tem certeza que deseja fechar esse ticket?`
+            )
+        )
+        .addSeparatorComponents(
+            new SeparatorBuilder()
+        )
+        .addActionRowComponents(
+            new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(CONFIRM_CLOSE_TICKET)
+                    .setLabel('Sim')
+                    .setEmoji('✅')
+                    .setStyle(ButtonStyle.Success),
+
+                new ButtonBuilder()
+                    .setCustomId(CANCEL_CLOSE_TICKET)
+                    .setLabel('Não')
+                    .setEmoji('❌')
+                    .setStyle(ButtonStyle.Danger)
+            )
+        )
+        .addSeparatorComponents(
+            new SeparatorBuilder()
+        )
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(TICKET_FOOTER)
+        );
+}
+
+function criarContainerCancelado() {
+    return new ContainerBuilder()
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(
+                '⚠️ | Fechamento do ticket cancelado'
+            )
+        )
+        .addSeparatorComponents(
+            new SeparatorBuilder()
+        )
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(TICKET_FOOTER)
+        );
+}
+
+// =========================
+// VERIFICAR STAFF
+// =========================
+
+function isStaff(interaction) {
+    if (!interaction.inGuild() || !interaction.member) {
+        return false;
+    }
+
+    if (
+        interaction.memberPermissions?.has(
+            PermissionFlagsBits.Administrator
+        )
+    ) {
+        return true;
+    }
+
+    return Boolean(
+        interaction.member.roles?.cache?.has(STAFF_ROLE_ID)
+    );
+}
+
+// =========================
+// PROCESSAR INTERAÇÕES DE TICKET
+// =========================
+
+async function handleTicketInteraction(interaction) {
+    // MENU DE SELEÇÃO
+
+    if (
+        interaction.isStringSelectMenu() &&
+        interaction.customId === TICKET_SELECT
+    ) {
+        const choice = interaction.values[0];
+
+        if (choice === TICKET_DENUNCIA) {
+            return abrirModalDenuncia(interaction);
+        }
+
+        if (choice === TICKET_APPEAL) {
+            return abrirModalAppeal(interaction);
+        }
+
+        return true;
+    }
+
+    // BOTÃO FECHAR
+
+    if (
+        interaction.isButton() &&
+        interaction.customId === CLOSE_TICKET
+    ) {
+        if (!isStaff(interaction)) {
+            return interaction.reply({
+                components: [
+                    new ContainerBuilder()
+                        .addTextDisplayComponents(
+                            new TextDisplayBuilder().setContent(
+                                '❌ Apenas a equipe responsável pode fechar este ticket.'
+                            )
+                        )
+                        .addSeparatorComponents(
+                            new SeparatorBuilder()
+                        )
+                        .addTextDisplayComponents(
+                            new TextDisplayBuilder().setContent(
+                                TICKET_FOOTER
+                            )
+                        )
+                ],
+                flags:
+                    MessageFlags.IsComponentsV2 |
+                    MessageFlags.Ephemeral
+            });
+        }
+
+        return interaction.reply({
+            components: [
+                criarContainerConfirmacao(interaction.user)
+            ],
+            flags:
+                MessageFlags.IsComponentsV2 |
+                MessageFlags.Ephemeral
+        });
+    }
+
+    // CONFIRMAR FECHAMENTO
+
+    if (
+        interaction.isButton() &&
+        interaction.customId === CONFIRM_CLOSE_TICKET
+    ) {
+        if (!isStaff(interaction)) {
+            return interaction.reply({
+                content: '❌ Apenas a equipe responsável pode fechar este ticket.',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        const channel = interaction.channel;
+
+        if (!channel || !channel.deletable) {
+            return interaction.reply({
+                content: '❌ Não consegui fechar este canal. Verifique as permissões do bot.',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        const criarContagem = numero =>
+            new ContainerBuilder()
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(
+                        `⚠️ | Fechando esse ticket em ${numero}...`
+                    )
+                )
+                .addSeparatorComponents(
+                    new SeparatorBuilder()
+                )
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(
+                        TICKET_FOOTER
+                    )
+                );
+
+        await interaction.update({
+            components: [criarContagem(3)]
+        });
+
+        for (const numero of [2, 1]) {
+            await new Promise(resolve =>
+                setTimeout(resolve, 1000)
+            );
+
+            await interaction.editReply({
+                components: [criarContagem(numero)]
+            });
+        }
+
+        await new Promise(resolve =>
+            setTimeout(resolve, 1000)
+        );
+
+        await channel.delete(
+            'Ticket fechado pela equipe da PML'
+        ).catch(error => {
+            console.error(
+                '❌ Erro ao fechar ticket:',
+                error
+            );
+        });
+
+        return true;
+    }
+
+    // CANCELAR FECHAMENTO
+
+    if (
+        interaction.isButton() &&
+        interaction.customId === CANCEL_CLOSE_TICKET
+    ) {
+        if (!isStaff(interaction)) {
+            return interaction.reply({
+                content: '❌ Apenas a equipe responsável pode cancelar o fechamento.',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        await interaction.update({
+            components: [criarContainerCancelado()]
+        });
+
+        return true;
+    }
+
+    // ENVIAR MODAL DE DENÚNCIA
+
+    if (
+        interaction.isModalSubmit() &&
+        interaction.customId === 'modal_ticket_denuncia'
+    ) {
+        const denunciado =
+            interaction.fields.getTextInputValue('denunciado');
+
+        const motivo =
+            interaction.fields.getTextInputValue('motivo_denuncia');
+
+        const provas =
+            interaction.fields.getTextInputValue('provas_denuncia') ||
+            'Não informado.';
+
+        const conteudo =
+            `**Denunciado:**\n${denunciado}\n\n` +
+            `**Motivo:**\n${motivo}\n\n` +
+            `**Provas/links:**\n${provas}`;
+
+        return criarCanalTicket(
+            interaction,
+            'Denúncia',
+            conteudo
+        );
+    }
+
+    // ENVIAR MODAL DE APPEAL
+
+    if (
+        interaction.isModalSubmit() &&
+        interaction.customId === 'modal_ticket_appeal'
+    ) {
+        const punicao =
+            interaction.fields.getTextInputValue('punicao_appeal');
+
+        const motivo =
+            interaction.fields.getTextInputValue('motivo_appeal');
+
+        const conteudo =
+            `**Punição contestada:**\n${punicao}\n\n` +
+            `**Motivo do recurso:**\n${motivo}`;
+
+        return criarCanalTicket(
+            interaction,
+            'Appeal',
+            conteudo
+        );
+    }
+
+    return false;
+}
+
+// =========================
+// EXECUTAR /TICKET
+// =========================
+
+async function executarTicketCommand(interaction) {
+    if (
+        !interaction.memberPermissions?.has(
+            PermissionFlagsBits.Administrator
+        )
+    ) {
+        return interaction.reply({
+            content: '❌ Você precisa ter **Administrador** para usar este comando.',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+
+    try {
+        const canalPainel =
+            await interaction.client.channels.fetch(
+                TICKET_PANEL_CHANNEL_ID
+            );
+
+        if (
+            !canalPainel ||
+            !canalPainel.isTextBased() ||
+            !canalPainel.guild
+        ) {
+            return interaction.reply({
+                content: '❌ Não foi possível encontrar o canal configurado para o painel de tickets.',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        const painel = criarPainelTicket();
+
+        await canalPainel.send({
+            components: [painel.container],
+            files: painel.files,
+            flags: MessageFlags.IsComponentsV2
+        });
+
+        return interaction.reply({
+            content: `✅ Painel de tickets enviado em <#${TICKET_PANEL_CHANNEL_ID}>.`,
+            flags: MessageFlags.Ephemeral
+        });
+    } catch (error) {
+        console.error(
+            '❌ Erro ao enviar painel de tickets:',
+            error
+        );
+
+        return interaction.reply({
+            content: '❌ Não foi possível enviar o painel. Verifique as permissões do bot e se os arquivos de imagem existem.',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+}
+
+// =========================
+// INTERAÇÕES: TICKETS, /SAY E /WARN
 // =========================
 
 client.on('interactionCreate', async interaction => {
     try {
+        // Processar menus, botões e modais primeiro.
+        const ticketHandled =
+            await handleTicketInteraction(interaction);
+
+        if (ticketHandled) return;
+
         if (!interaction.isChatInputCommand()) return;
+
+        // =========================
+        // COMANDO /TICKET
+        // =========================
+
+        if (interaction.commandName === 'ticket') {
+            return executarTicketCommand(interaction);
+        }
 
         // =========================
         // COMANDO /SAY
@@ -678,14 +1440,11 @@ client.on('interactionCreate', async interaction => {
 
         if (interaction.commandName !== 'warn') return;
 
-        // PERMISSÃO
         if (!canUseWarn(interaction.member)) {
-            await interaction.reply({
+            return interaction.reply({
                 content: '❌ Você não possui permissão para usar este comando.',
                 flags: MessageFlags.Ephemeral
             });
-
-            return;
         }
 
         const targetUser =
@@ -699,40 +1458,31 @@ client.on('interactionCreate', async interaction => {
             .catch(() => null);
 
         if (!member) {
-            await interaction.reply({
+            return interaction.reply({
                 content: '❌ Esse membro não está no servidor.',
                 flags: MessageFlags.Ephemeral
             });
-
-            return;
         }
 
         if (targetUser.bot) {
-            await interaction.reply({
+            return interaction.reply({
                 content: '❌ Você não pode aplicar warn em um bot.',
                 flags: MessageFlags.Ephemeral
             });
-
-            return;
         }
 
         if (targetUser.id === interaction.user.id) {
-            await interaction.reply({
+            return interaction.reply({
                 content: '❌ Você não pode aplicar warn em si mesmo.',
                 flags: MessageFlags.Ephemeral
             });
-
-            return;
         }
 
-        // HIERARQUIA
         if (member.id === interaction.guild.ownerId) {
-            await interaction.reply({
+            return interaction.reply({
                 content: '❌ Não é possível aplicar warn no dono do servidor.',
                 flags: MessageFlags.Ephemeral
             });
-
-            return;
         }
 
         if (
@@ -740,51 +1490,49 @@ client.on('interactionCreate', async interaction => {
                 interaction.member.roles.highest.position &&
             interaction.guild.ownerId !== interaction.user.id
         ) {
-            await interaction.reply({
+            return interaction.reply({
                 content: '❌ Você não pode aplicar warn em um membro com cargo igual ou superior ao seu.',
                 flags: MessageFlags.Ephemeral
             });
-
-            return;
         }
 
-        // IDENTIFICAR WARN
-        const hasWarn1 = member.roles.cache.has(WARN_1_ROLE_ID);
-        const hasWarn2 = member.roles.cache.has(WARN_2_ROLE_ID);
+        const hasWarn1 =
+            member.roles.cache.has(WARN_1_ROLE_ID);
 
-        let warnNumber;
+        const hasWarn2 =
+            member.roles.cache.has(WARN_2_ROLE_ID);
 
-        if (hasWarn2) {
-            warnNumber = 3;
-        } else if (hasWarn1) {
-            warnNumber = 2;
-        } else {
-            warnNumber = 1;
-        }
+        const warnNumber = hasWarn2
+            ? 3
+            : hasWarn1
+                ? 2
+                : 1;
 
         const staffMention = `<@${interaction.user.id}>`;
         const memberMention = `<@${member.id}>`;
 
         // =========================
-        // WARN 1
+        // WARN 1 OU WARN 2
         // =========================
 
-        if (warnNumber === 1) {
+        if (warnNumber === 1 || warnNumber === 2) {
+            const roleId = warnNumber === 1
+                ? WARN_1_ROLE_ID
+                : WARN_2_ROLE_ID;
+
             try {
-                await member.roles.add(WARN_1_ROLE_ID);
+                await member.roles.add(roleId);
             } catch (error) {
-                await interaction.reply({
-                    content: '❌ Não consegui adicionar o cargo do primeiro warn. Verifique a hierarquia dos cargos do bot.',
+                return interaction.reply({
+                    content: `❌ Não consegui adicionar o cargo do ${warnNumber === 1 ? 'primeiro' : 'segundo'} warn. Verifique a hierarquia dos cargos do bot.`,
                     flags: MessageFlags.Ephemeral
                 });
-
-                return;
             }
 
             try {
                 await member.timeout(
                     60 * 60 * 1000,
-                    `Warn 1/3: ${reason}`
+                    `Warn ${warnNumber}/3: ${reason}`
                 );
             } catch (error) {
                 console.log(
@@ -797,14 +1545,10 @@ client.on('interactionCreate', async interaction => {
                 .addTextDisplayComponents(
                     new TextDisplayBuilder().setContent(
                         `## ⚠️ Advertência Aplicada\n\n` +
-                        `-# Staff\n` +
-                        `${staffMention} (\`${interaction.user.id}\`)\n` +
-                        `-# Membro\n` +
-                        `${memberMention} (\`${member.id}\`)\n` +
-                        `-# Motivo\n` +
-                        `${reason}\n` +
-                        `-# Info\n` +
-                        `1/3 • Mute de 1 hora`
+                        `-# Staff\n${staffMention} (\`${interaction.user.id}\`)\n` +
+                        `-# Membro\n${memberMention} (\`${member.id}\`)\n` +
+                        `-# Motivo\n${reason}\n` +
+                        `-# Info\n${warnNumber}/3 • Mute de 1 hora`
                     )
                 )
                 .addSeparatorComponents(
@@ -814,101 +1558,28 @@ client.on('interactionCreate', async interaction => {
                     new TextDisplayBuilder().setContent(BOT_FOOTER)
                 );
 
-            await sendWarnLog(interaction.guild, logContainer);
+            await sendWarnLog(
+                interaction.guild,
+                logContainer
+            );
 
             await sendWarnDM(
                 member,
                 `⚠️ Você recebeu uma Advertência na PML.\n\n` +
-                `-# Staff\n` +
-                `${staffMention} (\`${interaction.user.id}\`)\n` +
-                `-# Motivo\n` +
-                `${reason}\n` +
-                `-# Info\n` +
-                `1/3 • Mute de 1 hora\n\n` +
+                `-# Staff\n${staffMention} (\`${interaction.user.id}\`)\n` +
+                `-# Motivo\n${reason}\n` +
+                `-# Info\n${warnNumber}/3 • Mute de 1 hora\n\n` +
                 `> Se você receber 3 advertências será **BANIDO** do servidor.`
             );
 
-            await interaction.reply({
-                content: `✅ Advertência **1/3** aplicada em ${memberMention}.`,
+            return interaction.reply({
+                content: `✅ Advertência **${warnNumber}/3** aplicada em ${memberMention}.`,
                 flags: MessageFlags.Ephemeral
             });
-
-            return;
         }
 
         // =========================
-        // WARN 2
-        // =========================
-
-        if (warnNumber === 2) {
-            try {
-                await member.roles.add(WARN_2_ROLE_ID);
-            } catch (error) {
-                await interaction.reply({
-                    content: '❌ Não consegui adicionar o cargo do segundo warn. Verifique a hierarquia dos cargos do bot.',
-                    flags: MessageFlags.Ephemeral
-                });
-
-                return;
-            }
-
-            try {
-                await member.timeout(
-                    60 * 60 * 1000,
-                    `Warn 2/3: ${reason}`
-                );
-            } catch (error) {
-                console.log(
-                    '⚠️ Não foi possível aplicar o mute de 1 hora:',
-                    error.message
-                );
-            }
-
-            const logContainer = new ContainerBuilder()
-                .addTextDisplayComponents(
-                    new TextDisplayBuilder().setContent(
-                        `## ⚠️ Advertência Aplicada\n\n` +
-                        `-# Staff\n` +
-                        `${staffMention} (\`${interaction.user.id}\`)\n` +
-                        `-# Membro\n` +
-                        `${memberMention} (\`${member.id}\`)\n` +
-                        `-# Motivo\n` +
-                        `${reason}\n` +
-                        `-# Info\n` +
-                        `2/3 • Mute de 1 hora`
-                    )
-                )
-                .addSeparatorComponents(
-                    new SeparatorBuilder()
-                )
-                .addTextDisplayComponents(
-                    new TextDisplayBuilder().setContent(BOT_FOOTER)
-                );
-
-            await sendWarnLog(interaction.guild, logContainer);
-
-            await sendWarnDM(
-                member,
-                `⚠️ Você recebeu uma Advertência na PML.\n\n` +
-                `-# Staff\n` +
-                `${staffMention} (\`${interaction.user.id}\`)\n` +
-                `-# Motivo\n` +
-                `${reason}\n` +
-                `-# Info\n` +
-                `2/3 • Mute de 1 hora\n\n` +
-                `> Se você receber 3 advertências será **BANIDO** do servidor.`
-            );
-
-            await interaction.reply({
-                content: `✅ Advertência **2/3** aplicada em ${memberMention}.`,
-                flags: MessageFlags.Ephemeral
-            });
-
-            return;
-        }
-
-        // =========================
-        // WARN 3 = BAN
+        // WARN 3 = BANIMENTO
         // =========================
 
         if (warnNumber === 3) {
@@ -916,14 +1587,10 @@ client.on('interactionCreate', async interaction => {
                 .addTextDisplayComponents(
                     new TextDisplayBuilder().setContent(
                         `## 🔨 Banimento aplicado\n\n` +
-                        `-# Staff\n` +
-                        `${staffMention} (\`${interaction.user.id}\`)\n` +
-                        `-# Membro\n` +
-                        `${memberMention} (\`${member.id}\`)\n` +
-                        `-# Motivo\n` +
-                        `${reason}\n` +
-                        `-# Info\n` +
-                        `3/3 • Banido do servidor.`
+                        `-# Staff\n${staffMention} (\`${interaction.user.id}\`)\n` +
+                        `-# Membro\n${memberMention} (\`${member.id}\`)\n` +
+                        `-# Motivo\n${reason}\n` +
+                        `-# Info\n3/3 • Banido do servidor.`
                     )
                 )
                 .addSeparatorComponents(
@@ -933,24 +1600,19 @@ client.on('interactionCreate', async interaction => {
                     new TextDisplayBuilder().setContent(BOT_FOOTER)
                 );
 
-            // BOTÃO STJD
             const stjdButton = new ButtonBuilder()
                 .setLabel('STJD')
                 .setEmoji('🔨')
                 .setStyle(ButtonStyle.Link)
                 .setURL(STJD_URL);
 
-            // DM DO BAN
             const banDMContainer = new ContainerBuilder()
                 .addTextDisplayComponents(
                     new TextDisplayBuilder().setContent(
                         `## 🔨 Você foi **BANIDO** da PML\n\n` +
-                        `-# Staff\n` +
-                        `${staffMention} (\`${interaction.user.id}\`)\n` +
-                        `-# Motivo\n` +
-                        `${reason}\n` +
-                        `-# Info\n` +
-                        `3/3 • Banido do servidor.\n\n` +
+                        `-# Staff\n${staffMention} (\`${interaction.user.id}\`)\n` +
+                        `-# Motivo\n${reason}\n` +
+                        `-# Info\n3/3 • Banido do servidor.\n\n` +
                         `> Para ser desbanido entre no STJD da PML clicando no botão abaixo e abra um ticket.`
                     )
                 )
@@ -967,7 +1629,6 @@ client.on('interactionCreate', async interaction => {
                     new TextDisplayBuilder().setContent(BOT_FOOTER)
                 );
 
-            // TENTAR ENVIAR DM ANTES DE BANIR
             try {
                 await member.send({
                     components: [banDMContainer],
@@ -979,9 +1640,11 @@ client.on('interactionCreate', async interaction => {
                 );
             }
 
-            await sendWarnLog(interaction.guild, logContainer);
+            await sendWarnLog(
+                interaction.guild,
+                logContainer
+            );
 
-            // BANIR
             try {
                 await member.ban({
                     deleteMessageSeconds: 0,
@@ -993,24 +1656,20 @@ client.on('interactionCreate', async interaction => {
                     error
                 );
 
-                await interaction.reply({
+                return interaction.reply({
                     content: '❌ Não consegui banir o membro. Verifique a hierarquia do bot.',
                     flags: MessageFlags.Ephemeral
                 });
-
-                return;
             }
 
-            await interaction.reply({
+            return interaction.reply({
                 content: `🔨 ${memberMention} recebeu o **3º warn** e foi banido da PML.`,
                 flags: MessageFlags.Ephemeral
             });
-
-            return;
         }
     } catch (error) {
         console.error(
-            '❌ Erro no comando:',
+            '❌ Erro no comando/interação:',
             error
         );
 
@@ -1026,58 +1685,6 @@ client.on('interactionCreate', async interaction => {
         }
     }
 });
-
-// =========================
-// ENVIAR LOG DO WARN
-// =========================
-
-async function sendWarnLog(guild, container) {
-    try {
-        const channel =
-            guild.channels.cache.get(WARN_LOG_CHANNEL_ID);
-
-        if (!channel) {
-            console.log(
-                '❌ Canal de logs de warn não encontrado.'
-            );
-            return;
-        }
-
-        await channel.send({
-            components: [container],
-            flags: MessageFlags.IsComponentsV2
-        });
-    } catch (error) {
-        console.error(
-            '❌ Erro ao enviar log do warn:',
-            error
-        );
-    }
-}
-
-// =========================
-// ENVIAR DM DE WARN
-// =========================
-
-async function sendWarnDM(member, content) {
-    try {
-        const container = new ContainerBuilder()
-            .addTextDisplayComponents(
-                new TextDisplayBuilder().setContent(
-                    `${content}\n\n${BOT_FOOTER}`
-                )
-            );
-
-        await member.send({
-            components: [container],
-            flags: MessageFlags.IsComponentsV2
-        });
-    } catch (error) {
-        console.log(
-            `⚠️ Não foi possível enviar DM para ${member.user.tag}.`
-        );
-    }
-}
 
 // =========================
 // LOGIN

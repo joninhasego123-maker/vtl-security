@@ -15,7 +15,8 @@ const {
     PermissionFlagsBits,
     ActionRowBuilder,
     ButtonBuilder,
-    ButtonStyle
+    ButtonStyle,
+    ChannelType
 } = require('discord.js');
 
 const {
@@ -97,12 +98,35 @@ const commands = [
                 .setDescription('Motivo da advertência.')
                 .setRequired(true)
                 .setMaxLength(1000)
+        ),
+
+    new SlashCommandBuilder()
+        .setName('say')
+        .setDescription('Envia uma mensagem em um canal escolhido.')
+        .setDefaultMemberPermissions(
+            PermissionFlagsBits.Administrator
         )
-        .toJSON()
-];
+        .addStringOption(option =>
+            option
+                .setName('mensagem')
+                .setDescription('Mensagem que o bot vai enviar.')
+                .setRequired(true)
+                .setMaxLength(2000)
+        )
+        .addChannelOption(option =>
+            option
+                .setName('canal')
+                .setDescription('Canal onde a mensagem será enviada.')
+                .setRequired(true)
+                .addChannelTypes(
+                    ChannelType.GuildText,
+                    ChannelType.GuildAnnouncement
+                )
+        )
+].map(command => command.toJSON());
 
 // =========================
-// REGISTRAR COMANDO
+// REGISTRAR COMANDOS
 // =========================
 
 async function registerCommands() {
@@ -122,7 +146,10 @@ async function registerCommands() {
 
         console.log('✅ Comandos registrados com sucesso.');
     } catch (error) {
-        console.error('❌ Erro ao registrar comandos:', error);
+        console.error(
+            '❌ Erro ao registrar comandos:',
+            error
+        );
     }
 }
 
@@ -131,7 +158,9 @@ async function registerCommands() {
 // =========================
 
 client.once('ready', async () => {
-    console.log(`✅ PML • Bot Security online como ${client.user.tag}`);
+    console.log(
+        `✅ PML • Bot Security online como ${client.user.tag}`
+    );
 
     await registerCommands();
 });
@@ -328,7 +357,10 @@ client.on('messageCreate', async message => {
             );
         }
     } catch (error) {
-        console.error('❌ Erro no bloqueio de convites:', error);
+        console.error(
+            '❌ Erro no bloqueio de convites:',
+            error
+        );
     }
 });
 
@@ -467,7 +499,10 @@ client.on('messageDelete', async message => {
             });
         }
     } catch (error) {
-        console.error('❌ Erro no messageDelete:', error);
+        console.error(
+            '❌ Erro no messageDelete:',
+            error
+        );
     }
 });
 
@@ -544,7 +579,10 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
             flags: MessageFlags.IsComponentsV2
         });
     } catch (error) {
-        console.error('❌ Erro no messageUpdate:', error);
+        console.error(
+            '❌ Erro no messageUpdate:',
+            error
+        );
     }
 });
 
@@ -555,7 +593,11 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
 function canUseWarn(member) {
     if (!member) return false;
 
-    if (member.permissions.has(PermissionFlagsBits.Administrator)) {
+    if (
+        member.permissions.has(
+            PermissionFlagsBits.Administrator
+        )
+    ) {
         return true;
     }
 
@@ -565,12 +607,75 @@ function canUseWarn(member) {
 }
 
 // =========================
-// APLICAR WARN
+// INTERAÇÕES: /SAY E /WARN
 // =========================
 
 client.on('interactionCreate', async interaction => {
     try {
         if (!interaction.isChatInputCommand()) return;
+
+        // =========================
+        // COMANDO /SAY
+        // =========================
+
+        if (interaction.commandName === 'say') {
+            if (
+                !interaction.memberPermissions?.has(
+                    PermissionFlagsBits.Administrator
+                )
+            ) {
+                return interaction.reply({
+                    content: '❌ Você precisa ter permissão de **Administrador** para usar este comando.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            const mensagem =
+                interaction.options.getString('mensagem');
+
+            const canal =
+                interaction.options.getChannel('canal');
+
+            if (
+                !canal ||
+                !canal.isTextBased() ||
+                typeof canal.send !== 'function'
+            ) {
+                return interaction.reply({
+                    content: '❌ Selecione um canal de texto válido.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            try {
+                await canal.send({
+                    content: mensagem,
+                    allowedMentions: {
+                        parse: ['users', 'roles']
+                    }
+                });
+
+                return interaction.reply({
+                    content: `✅ Mensagem enviada com sucesso em ${canal}.`,
+                    flags: MessageFlags.Ephemeral
+                });
+            } catch (error) {
+                console.error(
+                    '❌ Erro no comando /say:',
+                    error
+                );
+
+                return interaction.reply({
+                    content: '❌ Não consegui enviar a mensagem. Verifique se o bot tem permissão para visualizar o canal e enviar mensagens nele.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+        }
+
+        // =========================
+        // COMANDO /WARN
+        // =========================
+
         if (interaction.commandName !== 'warn') return;
 
         // PERMISSÃO
@@ -835,7 +940,7 @@ client.on('interactionCreate', async interaction => {
                 .setStyle(ButtonStyle.Link)
                 .setURL(STJD_URL);
 
-            // DM DO BAN: botão dentro do mesmo Container V2
+            // DM DO BAN
             const banDMContainer = new ContainerBuilder()
                 .addTextDisplayComponents(
                     new TextDisplayBuilder().setContent(
@@ -883,7 +988,10 @@ client.on('interactionCreate', async interaction => {
                     reason: `3/3 Warns: ${reason}`
                 });
             } catch (error) {
-                console.error('❌ Erro ao banir membro:', error);
+                console.error(
+                    '❌ Erro ao banir membro:',
+                    error
+                );
 
                 await interaction.reply({
                     content: '❌ Não consegui banir o membro. Verifique a hierarquia do bot.',
@@ -901,7 +1009,10 @@ client.on('interactionCreate', async interaction => {
             return;
         }
     } catch (error) {
-        console.error('❌ Erro no comando /warn:', error);
+        console.error(
+            '❌ Erro no comando:',
+            error
+        );
 
         if (
             interaction.isRepliable() &&
@@ -926,7 +1037,9 @@ async function sendWarnLog(guild, container) {
             guild.channels.cache.get(WARN_LOG_CHANNEL_ID);
 
         if (!channel) {
-            console.log('❌ Canal de logs de warn não encontrado.');
+            console.log(
+                '❌ Canal de logs de warn não encontrado.'
+            );
             return;
         }
 
@@ -935,7 +1048,10 @@ async function sendWarnLog(guild, container) {
             flags: MessageFlags.IsComponentsV2
         });
     } catch (error) {
-        console.error('❌ Erro ao enviar log do warn:', error);
+        console.error(
+            '❌ Erro ao enviar log do warn:',
+            error
+        );
     }
 }
 
@@ -966,5 +1082,10 @@ async function sendWarnDM(member, content) {
 // =========================
 // LOGIN
 // =========================
+
+if (!TOKEN) {
+    console.error('❌ A variável TOKEN não está configurada.');
+    process.exit(1);
+}
 
 client.login(TOKEN);

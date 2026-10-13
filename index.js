@@ -117,6 +117,23 @@ const commands = [
         ),
 
     new SlashCommandBuilder()
+        .setName('unwarn')
+        .setDescription('Remove uma advertência de um membro.')
+        .addUserOption(option =>
+            option
+                .setName('membro')
+                .setDescription('Membro que terá uma advertência removida.')
+                .setRequired(true)
+        )
+        .addStringOption(option =>
+            option
+                .setName('motivo')
+                .setDescription('Motivo da remoção da advertência.')
+                .setRequired(true)
+                .setMaxLength(1000)
+        ),
+
+    new SlashCommandBuilder()
         .setName('ban')
         .setDescription('Bane um membro do servidor.')
         .addUserOption(option =>
@@ -1525,10 +1542,10 @@ client.on('interactionCreate', async interaction => {
                 .addTextDisplayComponents(
                     new TextDisplayBuilder().setContent(
                         `## 🔨 Banimento aplicado!\n` +
-                        `**Staff**\n${banStaffMention} (\`${interaction.user.id}\`)\n` +
-                        `**Membro**\n${banMemberMention} (\`${banTarget.id}\`)\n` +
-                        `**Motivo**\n${banReason}\n` +
-                        `**Info**\nBanimento direto.`
+                        `**🛠️ Staff**\n${banStaffMention} (\`${interaction.user.id}\`)\n` +
+                        `**👤 Membro**\n${banMemberMention} (\`${banTarget.id}\`)\n` +
+                        `**📌 Motivo**\n${banReason}\n` +
+                        `**ℹ️ Info**\nBanimento direto.`
                     )
                 )
                 .addSeparatorComponents(
@@ -1548,8 +1565,8 @@ client.on('interactionCreate', async interaction => {
                 .addTextDisplayComponents(
                     new TextDisplayBuilder().setContent(
                         `## 🔨 Você foi **BANIDO** da PML\n\n` +
-                        `-# Staff\n${banStaffMention} (\`${interaction.user.id}\`)\n` +
-                        `-# Motivo\n${banReason}\n\n` +
+                        `-# 🛠️ Staff\n${banStaffMention} (\`${interaction.user.id}\`)\n` +
+                        `-# 📌 Motivo\n${banReason}\n\n` +
                         `> Para ser desbanido entre no STJD da PML clicando no botão abaixo e abra um ticket.`
                     )
                 )
@@ -1603,6 +1620,147 @@ client.on('interactionCreate', async interaction => {
 
             return interaction.editReply({
                 content: `🔨 ${banMemberMention} foi banido da PML.`
+            });
+        }
+
+        // =========================
+        // COMANDO /UNWARN
+        // =========================
+
+        if (interaction.commandName === 'unwarn') {
+            if (!canUseWarn(interaction.member)) {
+                return interaction.reply({
+                    content: '❌ Você não possui permissão para usar este comando.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            const unwarnUser =
+                interaction.options.getUser('membro');
+
+            const unwarnReason =
+                interaction.options.getString('motivo');
+
+            const unwarnMember = await interaction.guild.members
+                .fetch(unwarnUser.id)
+                .catch(() => null);
+
+            if (!unwarnMember) {
+                return interaction.reply({
+                    content: '❌ Esse membro não está no servidor.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            if (unwarnUser.bot) {
+                return interaction.reply({
+                    content: '❌ Você não pode remover warn de um bot.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            if (unwarnUser.id === interaction.user.id) {
+                return interaction.reply({
+                    content: '❌ Você não pode remover o seu próprio warn.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            if (
+                unwarnMember.roles.highest.position >=
+                    interaction.member.roles.highest.position &&
+                interaction.guild.ownerId !== interaction.user.id
+            ) {
+                return interaction.reply({
+                    content: '❌ Você não pode remover warn de um membro com cargo igual ou superior ao seu.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            const unwarnHasWarn1 =
+                unwarnMember.roles.cache.has(WARN_1_ROLE_ID);
+
+            const unwarnHasWarn2 =
+                unwarnMember.roles.cache.has(WARN_2_ROLE_ID);
+
+            if (!unwarnHasWarn1 && !unwarnHasWarn2) {
+                return interaction.reply({
+                    content: '❌ Esse membro não possui nenhuma advertência.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            // Tem 2 warns -> remove o cargo do warn 2 (fica com 1/3)
+            // Tem 1 warn  -> remove o cargo do warn 1 (fica com 0/3)
+            const unwarnRoleId = unwarnHasWarn2
+                ? WARN_2_ROLE_ID
+                : WARN_1_ROLE_ID;
+
+            const unwarnTotal = unwarnHasWarn2 ? 1 : 0;
+
+            try {
+                await unwarnMember.roles.remove(unwarnRoleId);
+            } catch (error) {
+                console.error(
+                    '❌ Erro ao remover cargo de warn:',
+                    error
+                );
+
+                return interaction.reply({
+                    content: '❌ Não consegui remover o cargo do warn. Verifique a hierarquia dos cargos do bot.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            // Remove também o mute aplicado pelo warn
+            try {
+                await unwarnMember.timeout(
+                    null,
+                    `Unwarn: ${unwarnReason}`
+                );
+            } catch (error) {
+                console.log(
+                    '⚠️ Não foi possível remover o mute:',
+                    error.message
+                );
+            }
+
+            const unwarnStaffMention = `<@${interaction.user.id}>`;
+            const unwarnMemberMention = `<@${unwarnMember.id}>`;
+
+            const unwarnLogContainer = new ContainerBuilder()
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(
+                        `## ✅ Advertência Removida\n\n` +
+                        `-# 🛠️ Staff\n${unwarnStaffMention} (\`${interaction.user.id}\`)\n` +
+                        `-# 👤 Membro\n${unwarnMemberMention} (\`${unwarnMember.id}\`)\n` +
+                        `-# 📌 Motivo\n${unwarnReason}\n` +
+                        `-# ℹ️ Info\n${unwarnTotal}/3 • Advertência removida`
+                    )
+                )
+                .addSeparatorComponents(
+                    new SeparatorBuilder()
+                )
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(BOT_FOOTER)
+                );
+
+            await sendWarnLog(
+                interaction.guild,
+                unwarnLogContainer
+            );
+
+            await sendWarnDM(
+                unwarnMember,
+                `✅ Uma advertência sua na PML foi removida.\n\n` +
+                `-# 🛠️ Staff\n${unwarnStaffMention} (\`${interaction.user.id}\`)\n` +
+                `-# 📌 Motivo\n${unwarnReason}\n` +
+                `-# ℹ️ Info\n${unwarnTotal}/3 • Advertência removida`
+            );
+
+            return interaction.reply({
+                content: `✅ Advertência removida de ${unwarnMemberMention}. Agora ele está com **${unwarnTotal}/3**.`,
+                flags: MessageFlags.Ephemeral
             });
         }
 
@@ -1717,10 +1875,10 @@ client.on('interactionCreate', async interaction => {
                 .addTextDisplayComponents(
                     new TextDisplayBuilder().setContent(
                         `## ⚠️ Advertência Aplicada\n\n` +
-                        `-# Staff\n${staffMention} (\`${interaction.user.id}\`)\n` +
-                        `-# Membro\n${memberMention} (\`${member.id}\`)\n` +
-                        `-# Motivo\n${reason}\n` +
-                        `-# Info\n${warnNumber}/3 • Mute de 1 hora`
+                        `-# 🛠️ Staff\n${staffMention} (\`${interaction.user.id}\`)\n` +
+                        `-# 👤 Membro\n${memberMention} (\`${member.id}\`)\n` +
+                        `-# 📌 Motivo\n${reason}\n` +
+                        `-# ℹ️ Info\n${warnNumber}/3 • Mute de 1 hora`
                     )
                 )
                 .addSeparatorComponents(
@@ -1738,9 +1896,9 @@ client.on('interactionCreate', async interaction => {
             await sendWarnDM(
                 member,
                 `⚠️ Você recebeu uma Advertência na PML.\n\n` +
-                `-# Staff\n${staffMention} (\`${interaction.user.id}\`)\n` +
-                `-# Motivo\n${reason}\n` +
-                `-# Info\n${warnNumber}/3 • Mute de 1 hora\n\n` +
+                `-# 🛠️ Staff\n${staffMention} (\`${interaction.user.id}\`)\n` +
+                `-# 📌 Motivo\n${reason}\n` +
+                `-# ℹ️ Info\n${warnNumber}/3 • Mute de 1 hora\n\n` +
                 `> Se você receber 3 advertências será **BANIDO** do servidor.`
             );
 
@@ -1759,10 +1917,10 @@ client.on('interactionCreate', async interaction => {
                 .addTextDisplayComponents(
                     new TextDisplayBuilder().setContent(
                         `## 🔨 Banimento aplicado\n\n` +
-                        `-# Staff\n${staffMention} (\`${interaction.user.id}\`)\n` +
-                        `-# Membro\n${memberMention} (\`${member.id}\`)\n` +
-                        `-# Motivo\n${reason}\n` +
-                        `-# Info\n3/3 • Banido do servidor.`
+                        `-# 🛠️ Staff\n${staffMention} (\`${interaction.user.id}\`)\n` +
+                        `-# 👤 Membro\n${memberMention} (\`${member.id}\`)\n` +
+                        `-# 📌 Motivo\n${reason}\n` +
+                        `-# ℹ️ Info\n3/3 • Banido do servidor.`
                     )
                 )
                 .addSeparatorComponents(
@@ -1782,9 +1940,9 @@ client.on('interactionCreate', async interaction => {
                 .addTextDisplayComponents(
                     new TextDisplayBuilder().setContent(
                         `## 🔨 Você foi **BANIDO** da PML\n\n` +
-                        `-# Staff\n${staffMention} (\`${interaction.user.id}\`)\n` +
-                        `-# Motivo\n${reason}\n` +
-                        `-# Info\n3/3 • Banido do servidor.\n\n` +
+                        `-# 🛠️ Staff\n${staffMention} (\`${interaction.user.id}\`)\n` +
+                        `-# 📌 Motivo\n${reason}\n` +
+                        `-# ℹ️ Info\n3/3 • Banido do servidor.\n\n` +
                         `> Para ser desbanido entre no STJD da PML clicando no botão abaixo e abra um ticket.`
                     )
                 )

@@ -67,7 +67,7 @@ const WARN_ALLOWED_ROLES = [
 ];
 
 const STJD_URL = 'https://discord.gg/zXdZ9SwTG';
-const BOT_FOOTER = '-# PML • Bot Security';
+const BOT_FOOTER = '-# PML • System';
 
 const securityDeletedMessages = new Set();
 
@@ -1524,10 +1524,11 @@ client.on('interactionCreate', async interaction => {
             const banLogContainer = new ContainerBuilder()
                 .addTextDisplayComponents(
                     new TextDisplayBuilder().setContent(
-                        `## 🔨 Banimento aplicado\n\n` +
-                        `-# Staff\n${banStaffMention} (\`${interaction.user.id}\`)\n` +
-                        `-# Membro\n${banMemberMention} (\`${banTarget.id}\`)\n` +
-                        `-# Motivo\n${banReason}`
+                        `## 🔨 Banimento aplicado!\n` +
+                        `**Staff**\n${banStaffMention} (\`${interaction.user.id}\`)\n` +
+                        `**Membro**\n${banMemberMention} (\`${banTarget.id}\`)\n` +
+                        `**Motivo**\n${banReason}\n` +
+                        `**Info**\nBanimento direto.`
                     )
                 )
                 .addSeparatorComponents(

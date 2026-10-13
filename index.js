@@ -117,6 +117,23 @@ const commands = [
         ),
 
     new SlashCommandBuilder()
+        .setName('ban')
+        .setDescription('Bane um membro do servidor.')
+        .addUserOption(option =>
+            option
+                .setName('membro')
+                .setDescription('Membro que será banido.')
+                .setRequired(true)
+        )
+        .addStringOption(option =>
+            option
+                .setName('motivo')
+                .setDescription('Motivo do banimento.')
+                .setRequired(true)
+                .setMaxLength(1000)
+        ),
+
+    new SlashCommandBuilder()
         .setName('say')
         .setDescription('Envia uma mensagem em um canal escolhido.')
         .setDefaultMemberPermissions(
@@ -1355,7 +1372,7 @@ async function executarTicketCommand(interaction) {
 }
 
 // =========================
-// INTERAÇÕES: TICKETS, /SAY E /WARN
+// INTERAÇÕES: TICKETS, /SAY, /BAN E /WARN
 // =========================
 
 client.on('interactionCreate', async interaction => {
@@ -1432,6 +1449,160 @@ client.on('interactionCreate', async interaction => {
                     flags: MessageFlags.Ephemeral
                 });
             }
+        }
+
+        // =========================
+        // COMANDO /BAN
+        // =========================
+
+        if (interaction.commandName === 'ban') {
+            if (!canUseWarn(interaction.member)) {
+                return interaction.reply({
+                    content: '❌ Você não possui permissão para usar este comando.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            const banTarget =
+                interaction.options.getUser('membro');
+
+            const banReason =
+                interaction.options.getString('motivo');
+
+            if (banTarget.id === interaction.user.id) {
+                return interaction.reply({
+                    content: '❌ Você não pode banir a si mesmo.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            if (banTarget.id === client.user.id) {
+                return interaction.reply({
+                    content: '❌ Eu não posso me banir.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            if (banTarget.id === interaction.guild.ownerId) {
+                return interaction.reply({
+                    content: '❌ Não é possível banir o dono do servidor.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            const banMember = await interaction.guild.members
+                .fetch(banTarget.id)
+                .catch(() => null);
+
+            if (banMember) {
+                if (
+                    banMember.roles.highest.position >=
+                        interaction.member.roles.highest.position &&
+                    interaction.guild.ownerId !== interaction.user.id
+                ) {
+                    return interaction.reply({
+                        content: '❌ Você não pode banir um membro com cargo igual ou superior ao seu.',
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+
+                if (!banMember.bannable) {
+                    return interaction.reply({
+                        content: '❌ Não consigo banir esse membro. Verifique a hierarquia de cargos do bot.',
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+            }
+
+            await interaction.deferReply({
+                flags: MessageFlags.Ephemeral
+            });
+
+            const banStaffMention = `<@${interaction.user.id}>`;
+            const banMemberMention = `<@${banTarget.id}>`;
+
+            const banLogContainer = new ContainerBuilder()
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(
+                        `## 🔨 Banimento aplicado\n\n` +
+                        `-# Staff\n${banStaffMention} (\`${interaction.user.id}\`)\n` +
+                        `-# Membro\n${banMemberMention} (\`${banTarget.id}\`)\n` +
+                        `-# Motivo\n${banReason}`
+                    )
+                )
+                .addSeparatorComponents(
+                    new SeparatorBuilder()
+                )
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(BOT_FOOTER)
+                );
+
+            const banStjdButton = new ButtonBuilder()
+                .setLabel('STJD')
+                .setEmoji('🔨')
+                .setStyle(ButtonStyle.Link)
+                .setURL(STJD_URL);
+
+            const banMemberDMContainer = new ContainerBuilder()
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(
+                        `## 🔨 Você foi **BANIDO** da PML\n\n` +
+                        `-# Staff\n${banStaffMention} (\`${interaction.user.id}\`)\n` +
+                        `-# Motivo\n${banReason}\n\n` +
+                        `> Para ser desbanido entre no STJD da PML clicando no botão abaixo e abra um ticket.`
+                    )
+                )
+                .addSeparatorComponents(
+                    new SeparatorBuilder()
+                )
+                .addActionRowComponents(
+                    new ActionRowBuilder().addComponents(banStjdButton)
+                )
+                .addSeparatorComponents(
+                    new SeparatorBuilder()
+                )
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(BOT_FOOTER)
+                );
+
+            // A DM precisa ser enviada ANTES do ban
+            if (banMember) {
+                try {
+                    await banMember.send({
+                        components: [banMemberDMContainer],
+                        flags: MessageFlags.IsComponentsV2
+                    });
+                } catch (error) {
+                    console.log(
+                        `⚠️ Não foi possível enviar DM para ${banTarget.tag}.`
+                    );
+                }
+            }
+
+            try {
+                await interaction.guild.members.ban(banTarget.id, {
+                    deleteMessageSeconds: 0,
+                    reason: `Ban por ${interaction.user.tag}: ${banReason}`
+                });
+            } catch (error) {
+                console.error(
+                    '❌ Erro ao banir membro:',
+                    error
+                );
+
+                return interaction.editReply({
+                    content: '❌ Não consegui banir o membro. Verifique a hierarquia e as permissões do bot.'
+                });
+            }
+
+            await sendWarnLog(
+                interaction.guild,
+                banLogContainer
+            );
+
+            return interaction.editReply({
+                content: `🔨 ${banMemberMention} foi banido da PML.`
+            });
         }
 
         // =========================

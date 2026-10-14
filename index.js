@@ -24,6 +24,7 @@ const {
 } = require('discord.js');
 
 const { createCanvas, loadImage } = require('@napi-rs/canvas');
+const fs = require('fs');
 const path = require('path');
 const config = require('./config');
 
@@ -93,6 +94,85 @@ const TICKET_SELECT = 'ticket_tipo_select';
 const CLOSE_TICKET = 'fechar_ticket';
 const CONFIRM_CLOSE_TICKET = 'confirmar_fechar_ticket';
 const CANCEL_CLOSE_TICKET = 'cancelar_fechar_ticket';
+
+// =========================
+// CONFIGURAÇÕES DE LEVEL
+// =========================
+
+const MAX_LEVEL = 100;
+
+// Anti-spam
+const XP_COOLDOWN_MS = 60 * 1000; // 1 mensagem rende XP por minuto
+const XP_MIN = 15;
+const XP_MAX = 25;
+const MIN_MESSAGE_LENGTH = 3;
+
+// XP necessário para ir do level N para o N+1
+const xpForLevel = level => 5 * level * level + 50 * level + 100;
+
+// Cargos por faixa (do maior para o menor)
+// color = cor de reserva caso não consiga ler a cor do cargo no servidor
+const LEVEL_TIERS = [
+    { name: 'Legend',      minLevel: 100, roleId: '1559981001176776715', color: 0xe67e22 },
+    { name: 'Grandmaster', minLevel: 75,  roleId: '1559980847170592848', color: 0xf1c40f },
+    { name: 'Master',      minLevel: 50,  roleId: '1559980676953018438', color: 0xc0392b },
+    { name: 'Elite',       minLevel: 40,  roleId: '1559980452377526384', color: 0x8e44ad },
+    { name: 'Diamond',     minLevel: 30,  roleId: '1559980318075912374', color: 0x3bb4f2 },
+    { name: 'Platinum',    minLevel: 20,  roleId: '1559980001539915796', color: 0x7f8c8d },
+    { name: 'Gold',        minLevel: 10,  roleId: '1559979523296993330', color: 0xd4880f },
+    { name: 'Silver',      minLevel: 5,   roleId: '1559979391147180063', color: 0x95a5a6 },
+    { name: 'Bronze',      minLevel: 1,   roleId: '1559979245307166862', color: 0xc2570c }
+];
+
+const LEVEL_FOOTER =
+    '-# Continue ativo sem spammar mensagens para subir até o Level 100.';
+
+// =========================
+// ARMAZENAMENTO DO LEVEL (JSON)
+// =========================
+
+const LEVEL_DATA_DIR = path.join(__dirname, 'data');
+const LEVEL_DATA_FILE = path.join(LEVEL_DATA_DIR, 'levels.json');
+
+let levelDb = {};
+
+try {
+    if (!fs.existsSync(LEVEL_DATA_DIR)) {
+        fs.mkdirSync(LEVEL_DATA_DIR, { recursive: true });
+    }
+
+    if (fs.existsSync(LEVEL_DATA_FILE)) {
+        levelDb = JSON.parse(
+            fs.readFileSync(LEVEL_DATA_FILE, 'utf8')
+        );
+    }
+} catch (error) {
+    console.error('❌ Erro ao carregar levels.json:', error);
+    levelDb = {};
+}
+
+let levelSaveTimeout = null;
+
+function saveLevelsSoon() {
+    if (levelSaveTimeout) return;
+
+    levelSaveTimeout = setTimeout(() => {
+        levelSaveTimeout = null;
+
+        fs.writeFile(
+            LEVEL_DATA_FILE,
+            JSON.stringify(levelDb),
+            error => {
+                if (error) {
+                    console.error(
+                        '❌ Erro ao salvar levels.json:',
+                        error
+                    );
+                }
+            }
+        );
+    }, 5000);
+}
 
 // =========================
 // SLASH COMMANDS
@@ -415,6 +495,165 @@ client.on('messageCreate', async message => {
     } catch (error) {
         console.error(
             '❌ Erro no bloqueio de convites:',
+            error
+        );
+    }
+});
+
+// =========================
+// SISTEMA DE LEVEL UP
+// =========================
+
+// Converte XP total em level + progresso dentro do level
+function getLevelInfo(totalXp) {
+    let level = 1;
+    let remaining = totalXp;
+
+    while (level < MAX_LEVEL && remaining >= xpForLevel(level)) {
+        remaining -= xpForLevel(level);
+        level++;
+    }
+
+    return {
+        level,
+        current: level >= MAX_LEVEL ? 0 : remaining,
+        needed: level >= MAX_LEVEL ? 0 : xpForLevel(level)
+    };
+}
+
+function getLevelTier(level) {
+    return (
+        LEVEL_TIERS.find(tier => level >= tier.minLevel) ||
+        LEVEL_TIERS[LEVEL_TIERS.length - 1]
+    );
+}
+
+// Garante que o membro tenha só o cargo da faixa atual
+async function syncLevelRoles(member, tier) {
+    try {
+        const otherRoles = LEVEL_TIERS
+            .filter(t => t.roleId !== tier.roleId)
+            .map(t => t.roleId)
+            .filter(id => member.roles.cache.has(id));
+
+        if (otherRoles.length) {
+            await member.roles.remove(otherRoles);
+        }
+
+        if (!member.roles.cache.has(tier.roleId)) {
+            await member.roles.add(tier.roleId);
+        }
+    } catch (error) {
+        console.log(
+            '⚠️ Não foi possível atualizar cargos de level:',
+            error.message
+        );
+    }
+}
+
+client.on('messageCreate', async message => {
+    try {
+        if (!message.guild || message.author.bot || !message.member) {
+            return;
+        }
+
+        const content = message.content?.trim() || '';
+
+        if (content.length < MIN_MESSAGE_LENGTH) return;
+        if (containsDiscordInvite(content)) return;
+
+        const userId = message.author.id;
+        const now = Date.now();
+
+        const isNew = !levelDb[userId];
+
+        if (isNew) {
+            levelDb[userId] = {
+                xp: 0,
+                lastXp: 0,
+                lastContent: ''
+            };
+        }
+
+        const userData = levelDb[userId];
+
+        // Cooldown
+        if (now - userData.lastXp < XP_COOLDOWN_MS) return;
+
+        // Ignora mensagem repetida
+        if (userData.lastContent === content.toLowerCase()) return;
+
+        const levelBefore = getLevelInfo(userData.xp).level;
+
+        userData.xp +=
+            Math.floor(Math.random() * (XP_MAX - XP_MIN + 1)) + XP_MIN;
+        userData.lastXp = now;
+        userData.lastContent = content.toLowerCase();
+
+        const after = getLevelInfo(userData.xp);
+
+        saveLevelsSoon();
+
+        // Primeiro registro: já entrega o cargo Bronze
+        if (isNew) {
+            await syncLevelRoles(
+                message.member,
+                getLevelTier(after.level)
+            );
+        }
+
+        if (after.level <= levelBefore) return;
+
+        // ======= LEVEL UP =======
+
+        const tier = getLevelTier(after.level);
+        const gotNewRole = LEVEL_TIERS.some(
+            t => t.minLevel === after.level
+        );
+
+        if (gotNewRole) {
+            await syncLevelRoles(message.member, tier);
+        }
+
+        // Cor do container = cor do cargo da faixa atual
+        const role = message.guild.roles.cache.get(tier.roleId);
+        const color = role && role.color ? role.color : tier.color;
+
+        const xpText =
+            after.level >= MAX_LEVEL
+                ? 'MAX'
+                : `${after.current}/${after.needed}`;
+
+        let text =
+            `## 🎉 Level Up!\n` +
+            `> ${message.author} subiu para o **Level ${after.level}** na PML.`;
+
+        if (gotNewRole) {
+            text += `\n> **Novo cargo:** <@&${tier.roleId}>`;
+        }
+
+        text += `\n> **XP:** ${xpText}`;
+
+        const levelContainer = new ContainerBuilder()
+            .setAccentColor(color)
+            .addTextDisplayComponents(
+                new TextDisplayBuilder().setContent(text)
+            )
+            .addSeparatorComponents(
+                new SeparatorBuilder()
+            )
+            .addTextDisplayComponents(
+                new TextDisplayBuilder().setContent(LEVEL_FOOTER)
+            );
+
+        await message.channel.send({
+            components: [levelContainer],
+            flags: MessageFlags.IsComponentsV2,
+            allowedMentions: { parse: [] }
+        });
+    } catch (error) {
+        console.error(
+            '❌ Erro no sistema de level:',
             error
         );
     }

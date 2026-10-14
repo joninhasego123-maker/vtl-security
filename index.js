@@ -102,7 +102,7 @@ const CANCEL_CLOSE_TICKET = 'cancelar_fechar_ticket';
 const MAX_LEVEL = 100;
 
 // Anti-spam
-const XP_COOLDOWN_MS = 60 * 1000; // 1 mensagem rende XP por minuto
+const XP_COOLDOWN_MS = 30 * 1000; // 1 mensagem rende XP por minuto
 const XP_MIN = 15;
 const XP_MAX = 25;
 const MIN_MESSAGE_LENGTH = 3;
